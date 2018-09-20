@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use ::structopt::StructOpt;
 use ::std::rc::Rc;
 
+use ::std::time::Duration;
 
 #[derive(Debug, EnumString, Display, Serialize, Deserialize, Eq, PartialEq)]
 pub enum ExperimentDirection {
@@ -47,6 +48,9 @@ pub struct ExperimentInfo {
 
     #[structopt(long = "sesionid")]
     pub session_id: Option<u64>,
+
+    #[structopt(long = "warmup_time", default_value = "2000000")]
+    pub pending_in_microseconds: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -58,8 +62,10 @@ pub enum ExperimentReply {
     /// Experiment is denied because of parameters are too aggressive
     ResourceLimits,
     /// Server requests client to re-send the request with a supplied key attached
-    /// (to deter spoofed source addresses)
+    /// (to deter spoofed source addresses DoS amplification)
     RetryWithASessionId{session_id:u64},
     /// Results are already vailable
     HereAreResults(Rc<super::results::ExperimentResults>),
+    /// Experiment is already running, but not completed yet. Retry later to get results.
+    IsOngoing,
 }

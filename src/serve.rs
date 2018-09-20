@@ -13,6 +13,7 @@ use ::serde_cbor::{ser::to_vec_sd,de::from_slice};
 
 use crate::experiment::statement::{ExperimentInfo,ExperimentReply};
 use crate::experiment::results::ExperimentResults;
+use crate::experiment::receiver::{PacketReceiver,PacketReceiverParams};
 
 use ::rand::Rng;
 
@@ -39,6 +40,7 @@ struct OngoingExperiment {
     start_time : Instant,
     info: ExperimentInfo,
     cla : SocketAddr,
+    rcv: PacketReceiver,
 }
 
 #[derive(Eq,PartialEq)]
@@ -63,7 +65,28 @@ pub fn serve(cmd:Cmd) -> Result<()> {
 
     loop {
         match (try {
-            let (ret,cla) = udp.recv_from(&mut buf)?;
+            let (ret,cla) = match udp.recv_from(&mut buf) {
+                Ok(x) => x,
+                Err(ref e) if e.kind() == ::std::io::ErrorKind::WouldBlock => {
+                    st = match st {
+                        State::ExperimentIsOngoing(oe) => {
+                            if oe.rcv.expired() {
+                                println!("Experiment completed");
+                                let ce = CompletedExperiment(oe.info, Rc::new(oe.rcv.analyse()));
+                                State::Idle(Some(ce), None)
+                            } else {
+                                State::ExperimentIsOngoing(oe)
+                            }
+                        }
+                        _ => {
+                            println!("unexpected wouldblock");
+                            st
+                        }
+                    };
+                    continue;
+                },
+                Err(e) => Err(e)?,
+            };
             let msg = &buf[0..ret];
             match &mut st {
                 State::Idle(ref laste,ref mut pending) => {
@@ -77,14 +100,25 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                         rp = ExperimentReply::ResourceLimits;
                     } else if rq.session_id.is_some() && pending == &Some(PendingExperiment{cla,sid:rq.session_id.unwrap()}) {
                         println!("Starting experiment: {:?}", rq);
-                        udp.set_read_timeout(Some(Duration::from_secs(3)))?;
+                        udp.set_read_timeout(Some(Duration::from_secs(2)))?;
 
                         rp = ExperimentReply::Accepted{session_id:rq.session_id.unwrap()};
                         
+                        let experiment_start = Instant::now() + Duration::from_micros(rq.pending_in_microseconds as u64);
+                        let experiment_stop = experiment_start + rq.duration();
+
+                        let prp = PacketReceiverParams {
+                            experiment_start,
+                            experiment_stop,
+                            session_id: rq.session_id.unwrap(),
+                            num_packets: rq.totalpackets,
+                        };
+
                         let oe = OngoingExperiment {
                             cla,
                             info: rq,
                             start_time:  Instant::now(),
+                            rcv: PacketReceiver::new(prp),
                         };
                         st = State::ExperimentIsOngoing(oe);
                     } else {
@@ -101,7 +135,27 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                         udp.reply(&rp, cla)?;
                         continue;
                     }
+                    
+                    if msg.len() < 16 {
+                        // dwarf packet
+                        continue;
+                    }
 
+                    if &msg[0..3] == b"\xd9\xd9\xf7" {
+                        let rq : ExperimentInfo = from_slice(msg)?;
+                        let rp;
+                        if rq == oe.info {
+                            rp = ExperimentReply::IsOngoing;
+                        } else {
+                            rp = ExperimentReply::Busy;
+                        }
+                        udp.reply(&rp, cla)?;
+                        continue;
+                    }
+                    
+                    if &msg[0..3] == b"\x00\x00\x00" {
+                        // TODO
+                    }
 
                 },
             };
@@ -135,6 +189,8 @@ impl ExperimentInfo {
 
         if self.totalpackets > 1_000_0000 { return false }
         if self.packetdelay_us > 60_000_000 { return false }
+
+        if self.pending_in_microseconds > 5_000_000 { return false }
 
         self.duration() <= maxdur && bw_kbps <= cmd.bwlimit
     }

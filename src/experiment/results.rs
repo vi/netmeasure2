@@ -1,7 +1,7 @@
 use crate::Result;
 
 counted_array!(
-const DELAY_DELTAS: [i16; _] = [
+pub const DELAY_DELTAS: [i16; _] = [
 0, 10, -10, 20, -20, 30, -30, 40, -40, 50,
 -50, 60, -60, 70, -70, 80, -80, 90, -90, 100, -100, 200, -200, 300, -300,
 400, -400, 500, -500, 1000, -1000
@@ -9,15 +9,15 @@ const DELAY_DELTAS: [i16; _] = [
 
 /// Hard-coded delays ranges
 counted_array!(
-const DELAY_VALUES: [u16; _] = [
+pub const DELAY_VALUES: [u16; _] = [
     20, 50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1400, 1600, 1800,
     2000, 2500, 3000, 4000, 5000, 65535,
 ]);
 
 #[derive(Debug,Default,Serialize,Deserialize)]
 pub struct DelayModel {
-    value_popularity: [f32; DELAY_VALUES.len()],
-    delta_popularity: [f32; DELAY_DELTAS.len()],
+    pub value_popularity: [f32; DELAY_VALUES.len()],
+    pub delta_popularity: [f32; DELAY_DELTAS.len()],
 }
 
 /// Hard-coded loss (or non-loss) cluster ranges
@@ -29,15 +29,15 @@ const CLUSTERS: [u16; _] = [
 
 #[derive(Debug,Default,Serialize,Deserialize)]
 pub struct LossModel {
-    nonloss: [f32; CLUSTERS.len()],
-    loss: [f32; CLUSTERS.len()],
+    pub nonloss: [f32; CLUSTERS.len()],
+    pub loss: [f32; CLUSTERS.len()],
 }
 
 #[derive(Debug,Default,Serialize,Deserialize)]
 pub struct ExperimentResults {
-    delay_model: DelayModel,
-    loss_model: LossModel,
-    session_id: u64,
+    pub delay_model: DelayModel,
+    pub loss_model: LossModel,
+    pub session_id: u64,
 }
 
 const ER_SIZE : usize = ::std::mem::size_of::<ExperimentResults>() * 3/2 + 64;
