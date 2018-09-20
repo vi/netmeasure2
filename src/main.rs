@@ -33,6 +33,15 @@ extern crate counted_array;
 #[macro_use]
 extern crate static_assertions;
 
+#[macro_use] 
+extern crate serde_derive;
+
+extern crate serde_cbor;
+
+#[macro_use]
+extern crate rand_derive;
+
+
 use self::enum_unitary::EnumUnitary;
 
 use self::structopt::StructOpt;
@@ -43,6 +52,8 @@ mod experiment;
 mod numplay;
 mod serve;
 
+
+pub type Result<T> = ::std::result::Result<T, ::failure::Error>;
 
 #[derive(Debug, StructOpt)]
 struct Probe {
@@ -66,15 +77,18 @@ enum Cmd {
     /// Run some numeric experiment
     #[structopt(name = "n")]
     Numplay(numplay::Numplay),
+
+    RDump,
 }
 
-fn main() -> ::std::io::Result<()> {
+fn main() -> Result<()> {
     let cmd = Cmd::from_args();
 
     match cmd {
         Cmd::Serve(x) => serve::serve(x)?,
         Cmd::Probe(x) => println!("probe {}", miniserde::json::to_string(&x.experiment)),
         Cmd::Numplay(x) => numplay::numplay(x)?,
+        Cmd::RDump => experiment::results::dump_some_results()?,
     };
     Ok(())
 }

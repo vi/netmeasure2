@@ -1,3 +1,4 @@
+use crate::Result;
 
 counted_array!(
 const DELAY_DELTAS: [i16; _] = [
@@ -13,8 +14,8 @@ const DELAY_VALUES: [u16; _] = [
     2000, 2500, 3000, 4000, 5000, 65535,
 ]);
 
-#[derive(Debug)]
-struct DelayModel {
+#[derive(Debug,Default,Serialize,Deserialize)]
+pub struct DelayModel {
     value_popularity: [f32; DELAY_VALUES.len()],
     delta_popularity: [f32; DELAY_DELTAS.len()],
 }
@@ -26,23 +27,30 @@ const CLUSTERS: [u16; _] = [
     150, 200, 300, 400, 65535,
 ]);
 
-#[derive(Debug)]
-struct LossModel {
+#[derive(Debug,Default,Serialize,Deserialize)]
+pub struct LossModel {
     nonloss: [f32; CLUSTERS.len()],
     loss: [f32; CLUSTERS.len()],
 }
 
-#[derive(Debug)]
-struct ExperimentResults {
+#[derive(Debug,Default,Serialize,Deserialize)]
+pub struct ExperimentResults {
     delay_model: DelayModel,
     loss_model: LossModel,
+    session_id: u64,
 }
 
 const ER_SIZE : usize = ::std::mem::size_of::<ExperimentResults>() * 3/2 + 64;
 const_assert!(er_fits_udp_packet; ER_SIZE < 1200);
 
-#[derive(Debug)]
-pub struct ExperimentReply {
-    base64_results: String,
-    session_id: u64,
+pub fn dump_some_results() -> Result<()>  {
+    let mut r = ExperimentResults::default();
+    let mut rnd = ::rand::thread_rng();
+    use ::rand::Rng;
+    for v in r.delay_model.value_popularity.iter_mut() { *v = rnd.gen(); }
+    for v in r.delay_model.delta_popularity.iter_mut() { *v = rnd.gen(); }
+    for v in r.loss_model.nonloss          .iter_mut() { *v = rnd.gen(); }
+    for v in r.loss_model.loss             .iter_mut() { *v = rnd.gen(); }
+    ::serde_cbor::ser::to_writer_sd(&mut ::std::io::stdout().lock(), &r)?;
+    Ok(())
 }

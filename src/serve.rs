@@ -1,6 +1,6 @@
 use ::structopt::StructOpt;
 use ::std::net::SocketAddr;
-use ::std::io::Result;
+use crate::Result;
 use ::std::str::from_utf8;
 use ::failure::Error;
 use ::std::convert::identity;
@@ -9,11 +9,14 @@ use ::std::net::UdpSocket;
 
 extern crate miniserde;
 use ::miniserde::json::{to_string,from_str};
+use ::serde_cbor::{ser::to_vec_sd,de::from_slice};
 
-use crate::experiment::statement::{ExperimentInfo,ExperimentReply,ExperimentReplyCode};
+use crate::experiment::statement::{ExperimentInfo,ExperimentReply};
+use crate::experiment::results::ExperimentResults;
 
 use ::rand::Rng;
 
+use ::std::rc::Rc;
 use ::std::time::{Duration,Instant};
 
 #[derive(Debug, StructOpt)]
@@ -30,10 +33,23 @@ pub struct Cmd {
     bwlimit: u32,
 }
 
+struct CompletedExperiment(ExperimentInfo, Rc<ExperimentResults>);
+
+struct OngoingExperiment {
+    start_time : Instant,
+    info: ExperimentInfo,
+    cla : SocketAddr,
+}
+
+#[derive(Eq,PartialEq)]
+struct PendingExperiment {
+    cla: SocketAddr,
+    sid: u64,
+}
+
 enum State {
-    Idle,
-    ExperimentIsOngoing(ExperimentInfo,SocketAddr,Instant),
-    //DeliveringResults,
+    Idle(Option<CompletedExperiment>, Option<PendingExperiment>),
+    ExperimentIsOngoing(OngoingExperiment),
 }
 
 
@@ -42,47 +58,51 @@ pub fn serve(cmd:Cmd) -> Result<()> {
     let mut udp = UdpSocket::bind(cmd.sa)?;
     println!("Listening {}", cmd.sa);
     let mut buf = [0; 4096];
-    let mut st = State::Idle;
+    let mut st = State::Idle(None, None);
     let mut rnd = ::rand::EntropyRng::new();
-    let mut cur_sid = None;
+
     loop {
         match (try {
             let (ret,cla) = udp.recv_from(&mut buf)?;
             let msg = &buf[0..ret];
-            match &st {
-                State::Idle => {
-                    let rq : ExperimentInfo = from_str(from_utf8(msg)?)?;
+            match &mut st {
+                State::Idle(ref laste,ref mut pending) => {
+                    let rq : ExperimentInfo = from_slice(msg)?;
 
                     let rp;
+                    if laste.is_some() && laste.as_ref().unwrap().0 == rq {
+                        rp = ExperimentReply::HereAreResults(laste.as_ref().unwrap().1.clone());
+                    } else
                     if !rq.within_limits(&cmd) {
-                        rp = ExperimentReply {
-                            session_id:0,
-                            status:ExperimentReplyCode::ResourceLimits,
-                        };
-                    } else if cur_sid.is_some() && rq.session_id == cur_sid {
+                        rp = ExperimentReply::ResourceLimits;
+                    } else if rq.session_id.is_some() && pending == &Some(PendingExperiment{cla,sid:rq.session_id.unwrap()}) {
                         println!("Starting experiment: {:?}", rq);
                         udp.set_read_timeout(Some(Duration::from_secs(3)))?;
 
-                        let session_id = cur_sid.unwrap();
-                        rp = ExperimentReply {session_id, status:ExperimentReplyCode::Accepted};
+                        rp = ExperimentReply::Accepted{session_id:rq.session_id.unwrap()};
                         
-                        cur_sid = None;
-                        st = State::ExperimentIsOngoing(rq, cla, Instant::now());
+                        let oe = OngoingExperiment {
+                            cla,
+                            info: rq,
+                            start_time:  Instant::now(),
+                        };
+                        st = State::ExperimentIsOngoing(oe);
                     } else {
-                        if cur_sid.is_none() {
-                            cur_sid = Some(rnd.gen());
+                        if pending.is_none() || pending.as_ref().unwrap().cla != cla {
+                            *pending = Some(PendingExperiment{cla, sid:rnd.gen()});
                         }
-                        let session_id = cur_sid.unwrap();
-                        rp = ExperimentReply {session_id, status:ExperimentReplyCode::RetryWithASessionId};
+                        rp = ExperimentReply::RetryWithASessionId{session_id: pending.as_ref().unwrap().sid}
                     }
                     udp.reply(&rp, cla)?;
                 },
-                State::ExperimentIsOngoing(e,cla_,startt) => {
-                    if cla_ != &cla {
-                        let rp = ExperimentReply {session_id:0, status:ExperimentReplyCode::Busy};
+                State::ExperimentIsOngoing(oe) => {
+                    if oe.cla != cla {
+                        let rp = ExperimentReply::Busy;
                         udp.reply(&rp, cla)?;
                         continue;
                     }
+
+
                 },
             };
         }) {
@@ -100,7 +120,7 @@ trait ExperimentNegotiation {
 
 impl ExperimentNegotiation for UdpSocket {
     fn reply(&mut self, rp: &ExperimentReply, cla: SocketAddr) -> Result<()> {
-        self.send_to(to_string(rp).as_bytes(), cla)?;
+        self.send_to(&to_vec_sd(rp)?[..], cla)?;
         Ok(())
     }
 }
