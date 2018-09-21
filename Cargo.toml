@@ -2,6 +2,7 @@
 name = "netmeasure2"
 version = "0.1.0"
 authors = ["Vitaly _Vi Shukela <vi0oss@gmail.com>"]
+license = "GPL v3"
 edition = "2018"
 
 [dependencies]
