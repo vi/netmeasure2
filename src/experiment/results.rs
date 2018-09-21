@@ -1,4 +1,5 @@
 use crate::Result;
+use ::std::rc::Rc;
 
 counted_array!(
 pub const DELAY_DELTAS: [i16; _] = [
@@ -39,6 +40,12 @@ pub struct ExperimentResults {
     pub loss_model: LossModel,
     pub session_id: u64,
     pub total_received_packets: u32,
+}
+
+#[derive(Debug,Default,Serialize,Deserialize)]
+pub struct BidirectionalResults {
+    pub to_server: Option<Rc<ExperimentResults>>,
+    pub from_server: Option<Rc<ExperimentResults>>,
 }
 
 const ER_SIZE : usize = ::std::mem::size_of::<ExperimentResults>() * 3/2 + 64;

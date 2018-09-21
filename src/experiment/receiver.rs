@@ -6,6 +6,7 @@ use ::byteorder::{BE,ByteOrder};
 
 use crate::experiment::SmallishDuration;
 
+#[derive(Copy,Clone,Default,Debug)]
 struct Info {
     rt_us: u32,
     st_us: u32,
@@ -17,6 +18,7 @@ pub struct PacketReceiver {
     start: Instant,
     stop: Instant,
     session_id: u64,
+    ctr: usize,
 }
 
 pub struct PacketReceiverParams {
@@ -37,15 +39,18 @@ impl PacketReceiver {
         if self.start > recv_ts { self.start = recv_ts}
         let rt_us = (recv_ts - self.start).as_us();
 
-        self.v.push(Info{rt_us, st_us, seqn});
+        self.v[self.ctr]=Info{rt_us, st_us, seqn};
+        self.ctr += 1;
     }
 
     pub fn new(prp: PacketReceiverParams) -> Self {
         PacketReceiver {
             start: prp.experiment_start,
             stop: prp.experiment_stop,
-            v: Vec::with_capacity(prp.num_packets as usize),
+            // not just with_capacity to avoid page faults while filling it in
+            v: vec![Default::default(); prp.num_packets as usize],
             session_id: prp.session_id,
+            ctr: 0,
         }
     }
 
@@ -54,6 +59,8 @@ impl PacketReceiver {
     }
 
     pub fn analyse(&self) -> ExperimentResults {
+        //println!("{:#?}",self.v);
+
         let delta_popularity = [0.0;31];
         let value_popularity = [0.0;24];
         let loss = [0.0;30];
@@ -71,7 +78,7 @@ impl PacketReceiver {
             session_id: self.session_id,
             loss_model,
             delay_model,
-            total_received_packets: self.v.len() as u32,
+            total_received_packets: self.ctr as u32,
         }
     }
 }

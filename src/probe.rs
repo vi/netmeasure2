@@ -166,6 +166,11 @@ pub fn probe(cmd:Cmd) -> Result<()> {
     }
     eprintln!("Results received");
 
+    let final_result = crate::experiment::results::BidirectionalResults {
+        to_server: Some(results_),
+        from_server: None,
+    };
+
     let out : Box<dyn(::std::io::Write)>;
     if let Some(pb) = cmd.output {
         let mut f = ::std::fs::File::create(pb)?;
@@ -174,7 +179,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
         out = Box::new(::std::io::stdout());
     }
     let mut out = ::std::io::BufWriter::new(out);
-    ::serde_json::ser::to_writer(&mut out, &results_)?;
+    ::serde_json::ser::to_writer(&mut out, &final_result)?;
     use ::std::io::Write;
     writeln!(out);
 
