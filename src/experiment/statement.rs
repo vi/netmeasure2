@@ -8,7 +8,10 @@ use ::std::rc::Rc;
 
 use ::std::time::Duration;
 
-#[derive(Debug, EnumString, Display, Serialize, Deserialize, Eq, PartialEq)]
+use ::structopt::clap::Arg;
+
+#[derive(Debug, EnumString, Display, Serialize, Deserialize, Eq, PartialEq, Copy, Clone)]
+#[serde(rename_all = "snake_case")]
 pub enum ExperimentDirection {
     #[strum(serialize = "send")]
     ToServerOnly,
@@ -24,8 +27,9 @@ miniserialize_for_display!(ExperimentDirection);
 minideserialize_for_fromstr!(ExperimentDirection);
 
 
-#[derive(Debug, StructOpt)]
-#[derive(MiniSerialize,MiniDeserialize,Serialize,Deserialize,PartialEq,Eq)]
+#[derive(Debug, StructOpt, Clone)]
+#[derive(MiniSerialize,MiniDeserialize,Serialize,Deserialize,Derivative)]
+#[derivative(PartialEq)]
 pub struct ExperimentInfo {
     /// Packet size for experiment, in bytes
     #[structopt(long = "packetsize", default_value = "120")]
@@ -43,24 +47,30 @@ pub struct ExperimentInfo {
     #[structopt(long = "direction", default_value = "both")]
     pub direction: ExperimentDirection,
 
+    /// Make packets looks like RTP
     #[structopt(long = "rtpmimic")]
     pub rtpmimic: bool,
 
-    #[structopt(long = "sesionid")]
+    /// Internal parameter, no need to set
+    #[structopt(long = "sessionid")]
     pub session_id: Option<u64>,
 
+    /// In microseconds
     #[structopt(long = "warmup_time", default_value = "2000000")]
-    pub pending_in_microseconds: u32,
+    #[derivative(PartialEq="ignore")]
+    pub pending_start_in_microseconds: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
 pub enum ExperimentReply {
     /// Experiment is accepted by server
     Accepted{session_id:u64},
     /// Server is busy with another experiment
     Busy,
     /// Experiment is denied because of parameters are too aggressive
-    ResourceLimits,
+    ResourceLimits{msg:String},
     /// Server requests client to re-send the request with a supplied key attached
     /// (to deter spoofed source addresses DoS amplification)
     RetryWithASessionId{session_id:u64},

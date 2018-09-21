@@ -41,6 +41,15 @@ extern crate serde_cbor;
 #[macro_use]
 extern crate rand_derive;
 
+extern crate byteorder;
+
+extern crate spin_sleep;
+
+#[macro_use]
+extern crate derivative;
+
+const API_VERSION: u32 = 0;
+
 
 use self::enum_unitary::EnumUnitary;
 
@@ -51,17 +60,31 @@ use std::net::SocketAddr;
 mod experiment;
 mod numplay;
 mod serve;
+mod probe;
 
 
 pub type Result<T> = ::std::result::Result<T, ::failure::Error>;
 
-#[derive(Debug, StructOpt)]
-struct Probe {
-    #[structopt(flatten)]
-    experiment: crate::experiment::statement::ExperimentInfo,
+use crate::experiment::statement::ExperimentInfo;
+use crate::experiment::statement::ExperimentReply;
 
-    /// Remote UDP port to use as netmeasure2 server
-    server: SocketAddr,
+#[derive(Debug, Serialize, Deserialize)]
+struct ClientToServer {
+    #[serde(flatten)]
+    experiment: ExperimentInfo,
+    api_version: u32,
+}
+#[derive(Debug, Serialize, Deserialize)]
+struct ServerToClient {
+    #[serde(flatten)]
+    reply: ExperimentReply,
+    api_version: u32,
+}
+impl From<ExperimentInfo> for ClientToServer {
+    fn from(experiment: ExperimentInfo) -> Self { ClientToServer { experiment, api_version: API_VERSION }}
+}
+impl From<ExperimentReply> for ServerToClient {
+    fn from(reply: ExperimentReply) -> Self { ServerToClient { reply, api_version: API_VERSION }}
 }
 
 #[derive(Debug, StructOpt)]
@@ -72,7 +95,7 @@ enum Cmd {
 
     /// Send experiment request to the specified UDP socket and do the experiment
     #[structopt(name = "probe")]
-    Probe(Probe),
+    Probe(probe::Cmd),
 
     /// Run some numeric experiment
     #[structopt(name = "n")]
@@ -86,7 +109,7 @@ fn main() -> Result<()> {
 
     match cmd {
         Cmd::Serve(x) => serve::serve(x)?,
-        Cmd::Probe(x) => println!("probe {}", miniserde::json::to_string(&x.experiment)),
+        Cmd::Probe(x) =>  probe::probe(x)?,
         Cmd::Numplay(x) => numplay::numplay(x)?,
         Cmd::RDump => experiment::results::dump_some_results()?,
     };

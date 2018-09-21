@@ -54,6 +54,21 @@ enum State {
     ExperimentIsOngoing(OngoingExperiment),
 }
 
+impl State {
+    fn complete_experiment(&mut self, udp: &mut UdpSocket) {
+        match self {
+            State::ExperimentIsOngoing(oe) => {
+                println!("Experiment completed");
+                let ce = CompletedExperiment(oe.info.clone(), Rc::new(oe.rcv.analyse()));
+                *self = State::Idle(Some(ce), None);
+                let _ = udp.set_read_timeout(None);
+            },
+            State::Idle(_,_) => {
+                panic!();
+            }
+        }
+    }
+}
 
 
 pub fn serve(cmd:Cmd) -> Result<()> {
@@ -68,20 +83,15 @@ pub fn serve(cmd:Cmd) -> Result<()> {
             let (ret,cla) = match udp.recv_from(&mut buf) {
                 Ok(x) => x,
                 Err(ref e) if e.kind() == ::std::io::ErrorKind::WouldBlock => {
-                    st = match st {
-                        State::ExperimentIsOngoing(oe) => {
+                    match st {
+                        State::ExperimentIsOngoing(ref oe) => {
                             if oe.rcv.expired() {
-                                println!("Experiment completed");
-                                let ce = CompletedExperiment(oe.info, Rc::new(oe.rcv.analyse()));
-                                State::Idle(Some(ce), None)
-                            } else {
-                                State::ExperimentIsOngoing(oe)
-                            }
-                        }
+                                st.complete_experiment(&mut udp);
+                            };
+                        },
                         _ => {
                             println!("unexpected wouldblock");
-                            st
-                        }
+                        },
                     };
                     continue;
                 },
@@ -90,21 +100,28 @@ pub fn serve(cmd:Cmd) -> Result<()> {
             let msg = &buf[0..ret];
             match &mut st {
                 State::Idle(ref laste,ref mut pending) => {
-                    let rq : ExperimentInfo = from_slice(msg)?;
+                    let s2c : super::ClientToServer = from_slice(msg)?;
+                    if s2c.api_version != crate::API_VERSION {
+                        println!("Invalid API version");
+                        continue;
+                    }
+                    let rq : ExperimentInfo = s2c.experiment;
 
                     let rp;
                     if laste.is_some() && laste.as_ref().unwrap().0 == rq {
                         rp = ExperimentReply::HereAreResults(laste.as_ref().unwrap().1.clone());
                     } else
-                    if !rq.within_limits(&cmd) {
-                        rp = ExperimentReply::ResourceLimits;
+                    if let Err(e) = rq.check_limits(&cmd) {
+                        rp = ExperimentReply::ResourceLimits{msg:e.to_string()};
                     } else if rq.session_id.is_some() && pending == &Some(PendingExperiment{cla,sid:rq.session_id.unwrap()}) {
                         println!("Starting experiment: {:?}", rq);
                         udp.set_read_timeout(Some(Duration::from_secs(2)))?;
 
                         rp = ExperimentReply::Accepted{session_id:rq.session_id.unwrap()};
                         
-                        let experiment_start = Instant::now() + Duration::from_micros(rq.pending_in_microseconds as u64);
+                        let experiment_start = Instant::now() + Duration::from_micros(
+                            rq.pending_start_in_microseconds as u64
+                        );
                         let experiment_stop = experiment_start + rq.duration();
 
                         let prp = PacketReceiverParams {
@@ -127,12 +144,12 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                         }
                         rp = ExperimentReply::RetryWithASessionId{session_id: pending.as_ref().unwrap().sid}
                     }
-                    udp.reply(&rp, cla)?;
+                    udp.reply(rp, cla)?;
                 },
                 State::ExperimentIsOngoing(oe) => {
                     if oe.cla != cla {
                         let rp = ExperimentReply::Busy;
-                        udp.reply(&rp, cla)?;
+                        udp.reply(rp, cla)?;
                         continue;
                     }
                     
@@ -147,16 +164,30 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                         if rq == oe.info {
                             rp = ExperimentReply::IsOngoing;
                         } else {
+                            eprintln!("{:?}", rq);
+                            eprintln!("!=");
+                            eprintln!("{:?}", oe.info);
+
                             rp = ExperimentReply::Busy;
                         }
-                        udp.reply(&rp, cla)?;
+                        udp.reply(rp, cla)?;
+
+                        if oe.rcv.expired() {
+                            st.complete_experiment(&mut udp);
+                        }
                         continue;
                     }
                     
                     if &msg[0..3] == b"\x00\x00\x00" {
-                        // TODO
+                        oe.rcv.recv(msg);
+                        continue;
                     }
 
+                    if &msg[0..3] == b"" {
+                        // TODO: RTP mode
+                    }
+
+                    println!("Unknown packet beginning with {:?}", &msg[0..3]);
                 },
             };
         }) {
@@ -169,30 +200,37 @@ pub fn serve(cmd:Cmd) -> Result<()> {
 }
 
 trait ExperimentNegotiation {
-    fn reply(&mut self, rp: &ExperimentReply, cla: SocketAddr) -> Result<()>;
+    fn reply(&mut self, rp: ExperimentReply, cla: SocketAddr) -> Result<()>;
 }
 
 impl ExperimentNegotiation for UdpSocket {
-    fn reply(&mut self, rp: &ExperimentReply, cla: SocketAddr) -> Result<()> {
-        self.send_to(&to_vec_sd(rp)?[..], cla)?;
+    fn reply(&mut self, rp: ExperimentReply, cla: SocketAddr) -> Result<()> {
+        let s2c = crate::ServerToClient::from(rp);
+        self.send_to(&to_vec_sd(&s2c)?[..], cla)?;
         Ok(())
     }
 }
 
 impl ExperimentInfo {
-    pub fn within_limits(&self, cmd: &Cmd) -> bool {
+    pub fn check_limits(&self, cmd: &Cmd) -> ::std::result::Result<(),&'static str> {
         let effective_ps = (self.packetsize+32).max(64);
-        if self.packetdelay_us == 0 { return false }
+        if self.packetdelay_us == 0 { return Err("zero packet delay") }
         let pps = 1000_000.0 / (self.packetdelay_us as f64);
         let bw_kbps = ((effective_ps as f64) * pps * 8.0 / 1024.0) as u32;
         let maxdur = Duration::from_secs(cmd.timelimit.into());
 
-        if self.totalpackets > 1_000_0000 { return false }
-        if self.packetdelay_us > 60_000_000 { return false }
+        if self.totalpackets > 1_000_0000 { return Err("total packets too big") }
+        if self.packetdelay_us > 60_000_000 { return Err("packet delay too big") }
 
-        if self.pending_in_microseconds > 5_000_000 { return false }
+        if self.packetsize < 16 || self.packetsize > 10000 {
+            return Err("invalid packetsize");
+        }
 
-        self.duration() <= maxdur && bw_kbps <= cmd.bwlimit
+        if self.pending_start_in_microseconds > 5_000_000 { return Err("pending start too late") }
+
+        if self.duration() > maxdur {return Err("duration too long") }
+        if bw_kbps > cmd.bwlimit { return Err("bwlimit") }
+        Ok(())
     }
 
     pub fn duration(&self) -> Duration {

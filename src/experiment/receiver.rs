@@ -1,9 +1,14 @@
-use ::std::time::Instant;
+use ::std::time::{Instant,Duration};
 
 use super::results::{ExperimentResults,DelayModel,LossModel};
 
+use ::byteorder::{BE,ByteOrder};
+
+use crate::experiment::SmallishDuration;
+
 struct Info {
-    t: Instant,
+    rt_us: u32,
+    st_us: u32,
     seqn: u32,
 }
 
@@ -22,8 +27,17 @@ pub struct PacketReceiverParams {
 }
 
 impl PacketReceiver {
-    pub fn register(&mut self, seqn: u32) {
-        self.v.push(Info{t:Instant::now(), seqn});
+    pub fn recv(&mut self, pkt: &[u8]) {
+        assert!(pkt.len() >= 16);
+        let seqn = BE::read_u32(&pkt[8..12]);
+        let st_us = BE::read_u32(&pkt[12..16]);
+
+
+        let recv_ts = Instant::now();
+        if self.start > recv_ts { self.start = recv_ts}
+        let rt_us = (recv_ts - self.start).as_us();
+
+        self.v.push(Info{rt_us, st_us, seqn});
     }
 
     pub fn new(prp: PacketReceiverParams) -> Self {
@@ -57,6 +71,7 @@ impl PacketReceiver {
             session_id: self.session_id,
             loss_model,
             delay_model,
+            total_received_packets: self.v.len() as u32,
         }
     }
 }
