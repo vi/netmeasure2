@@ -31,7 +31,6 @@ pub fn probe(cmd:Cmd) -> Result<()> {
     } else {
         SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, cmd.source_port))
     })?;
-    udp.connect(cmd.server)?;
     udp.set_read_timeout(Some(Duration::from_millis(250)))?;
 
     let mut c2s = crate::ClientToServer {
@@ -57,9 +56,14 @@ pub fn probe(cmd:Cmd) -> Result<()> {
         c2s.experiment.pending_start_in_microseconds = ttg.as_us();
         eprint!(".");
         //eprintln!("{:?}", c2s);
-        udp.send(::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice())?;
-        match udp.recv(&mut buf) {
-            Ok(ret) => {
+        udp.send_to(::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice(), cmd.server)?;
+        match udp.recv_from(&mut buf) {
+            Ok((ret,from)) => {
+                if (from != cmd.server) {
+                    eprintln!("Foreign packet");
+                    continue;
+                }
+
                 let s2c : crate::ServerToClient = ::serde_cbor::from_slice(&buf[0..ret])?;
 
                 if s2c.api_version != crate::API_VERSION {
@@ -92,6 +96,21 @@ pub fn probe(cmd:Cmd) -> Result<()> {
     eprintln!();
     eprintln!("Experiment started");
 
+    let udp2 = udp.try_clone()?;
+    let serv2 = cmd.server;
+    let sender = crate::experiment::sender::Sender {
+        delay_between_packets: Duration::from_micros(c2s.experiment.packetdelay_us),
+        packetcount: c2s.experiment.totalpackets,
+        packetsize: c2s.experiment.packetsize as usize,
+        rtpmimic: c2s.experiment.rtpmimic,
+        experiment_start: start,
+    };
+    ::std::thread::spawn(move || {
+        if let Err(e) = sender.run(udp2, serv2) {
+            eprintln!("Sender thread: {}", e);
+        }
+    });
+
     udp.set_read_timeout(Some(Duration::from_secs(1)))?;
 
     let mut request_results = false;
@@ -104,9 +123,14 @@ pub fn probe(cmd:Cmd) -> Result<()> {
             request_results = true;
         }
 
-        match udp.recv(&mut buf) {
-            Ok(ret) => {
+        match udp.recv_from(&mut buf) {
+            Ok((ret,from)) => {
                 let msg = &buf[0..ret];
+
+                if from != cmd.server {
+                    eprintln!("foreign packet");
+                    continue;
+                }
 
                 let s2c : crate::ServerToClient = ::serde_cbor::from_slice(msg)?;
 
@@ -134,7 +158,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
             },
             Err(ref e) if e.kind() == ::std::io::ErrorKind::WouldBlock => {
                 if request_results {
-                    udp.send(::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice())?;
+                    udp.send_to(::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice(), cmd.server)?;
                 }
             },
             Err(e) => Err(e)?,
