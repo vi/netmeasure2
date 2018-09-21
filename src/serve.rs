@@ -7,8 +7,6 @@ use ::std::convert::identity;
 
 use ::std::net::UdpSocket;
 
-extern crate miniserde;
-use ::miniserde::json::{to_string,from_str};
 use ::serde_cbor::{ser::to_vec_sd,de::from_slice};
 
 use crate::experiment::statement::{ExperimentInfo,ExperimentReply};

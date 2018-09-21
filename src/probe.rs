@@ -4,11 +4,12 @@ use ::std::net::{SocketAddr,UdpSocket,SocketAddrV4,SocketAddrV6,Ipv4Addr,Ipv6Add
 use ::std::time::{Duration,Instant};
 use crate::experiment::SmallishDuration;
 use crate::experiment::statement::{ExperimentInfo,ExperimentReply,ExperimentDirection};
+use crate::experiment::results::ExperimentResults;
 
 #[derive(Debug, StructOpt)]
 pub struct Cmd {
     #[structopt(flatten)]
-    pub experiment: crate::experiment::statement::ExperimentInfo,
+    pub experiment: ExperimentInfo,
 
     /// Remote UDP port to use as netmeasure2 server
     pub server: SocketAddr,
@@ -19,6 +20,9 @@ pub struct Cmd {
 
     #[structopt(long="source-port", default_value="0")]
     pub source_port: u16,
+
+    #[structopt(long="output", short="o", parse(from_os_str))]
+    pub output: Option<::std::path::PathBuf>,
 }
 
 pub fn probe(cmd:Cmd) -> Result<()> {
@@ -87,6 +91,68 @@ pub fn probe(cmd:Cmd) -> Result<()> {
     }
     eprintln!();
     eprintln!("Experiment started");
+
+    udp.set_read_timeout(Some(Duration::from_secs(1)))?;
+
+    let mut request_results = false;
+
+    let results_ : ::std::rc::Rc<ExperimentResults>;
+    loop {
+        let now = Instant::now();
+        if !request_results && now > end {
+            eprintln!("Experiment finished");
+            request_results = true;
+        }
+
+        match udp.recv(&mut buf) {
+            Ok(ret) => {
+                let msg = &buf[0..ret];
+
+                let s2c : crate::ServerToClient = ::serde_cbor::from_slice(msg)?;
+
+                if s2c.api_version != crate::API_VERSION {
+                    bail!("Wrong API version ; 2");
+                }
+
+                match s2c.reply {
+                    ExperimentReply::Busy => bail!("Server busy 2"),
+                    ExperimentReply::Accepted{session_id} => bail!("Accepted 2?"),
+                    ExperimentReply::ResourceLimits{msg} => {
+                        eprintln!("\nResource limits: {}", msg);
+                        bail!("Parameters out of range 2");
+                    },
+                    ExperimentReply::IsOngoing => continue,
+                    ExperimentReply::HereAreResults(results) => {
+                        ensure!(Some(results.session_id) == c2s.experiment.session_id,
+                            "wrong session id in results"
+                        );
+                        results_ = results;
+                        break;
+                    },
+                    ExperimentReply::RetryWithASessionId{session_id} => bail!("Unexpected retryWSId"),
+                };
+            },
+            Err(ref e) if e.kind() == ::std::io::ErrorKind::WouldBlock => {
+                if request_results {
+                    udp.send(::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice())?;
+                }
+            },
+            Err(e) => Err(e)?,
+        }
+    }
+    eprintln!("Results received");
+
+    let out : Box<dyn(::std::io::Write)>;
+    if let Some(pb) = cmd.output {
+        let mut f = ::std::fs::File::create(pb)?;
+        out = Box::new(f);
+    } else {
+        out = Box::new(::std::io::stdout());
+    }
+    let mut out = ::std::io::BufWriter::new(out);
+    ::serde_json::ser::to_writer(&mut out, &results_)?;
+    use ::std::io::Write;
+    writeln!(out);
 
     Ok(())
 }

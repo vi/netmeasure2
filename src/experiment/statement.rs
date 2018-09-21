@@ -1,6 +1,4 @@
 extern crate structopt;
-extern crate miniserde;
-extern crate miniserde_tools;
 
 use std::net::SocketAddr;
 use ::structopt::StructOpt;
@@ -23,12 +21,9 @@ pub enum ExperimentDirection {
     Bidirectional,
 }
 
-miniserialize_for_display!(ExperimentDirection);
-minideserialize_for_fromstr!(ExperimentDirection);
-
 
 #[derive(Debug, StructOpt, Clone)]
-#[derive(MiniSerialize,MiniDeserialize,Serialize,Deserialize,Derivative)]
+#[derive(Serialize,Deserialize,Derivative)]
 #[derivative(PartialEq)]
 pub struct ExperimentInfo {
     /// Packet size for experiment, in bytes

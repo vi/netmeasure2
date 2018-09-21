@@ -22,12 +22,6 @@ extern crate enum_unitary;
 extern crate rand;
 
 #[macro_use]
-extern crate miniserde;
-
-#[macro_use]
-extern crate miniserde_tools;
-
-#[macro_use]
 extern crate counted_array;
 
 #[macro_use]
@@ -37,6 +31,7 @@ extern crate static_assertions;
 extern crate serde_derive;
 
 extern crate serde_cbor;
+extern crate serde_json;
 
 #[macro_use]
 extern crate rand_derive;
