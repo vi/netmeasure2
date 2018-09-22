@@ -80,8 +80,9 @@ impl PacketReceiver {
         if let Err(e) = (try {
             let p = dir.join(format!("{}.dat",self.session_id));
             let f = ::std::fs::File::create(p)?;
-            let f = ::std::io::BufWriter::new(f);
+            let mut f = ::std::io::BufWriter::new(f);
             
+            ::bincode::serialize_into(&mut f, &self.v.len())?;
             ::bincode::serialize_into(f, &self.v[0..self.ctr])?;
         }) {
             let e : ::failure::Error = e;
@@ -90,7 +91,8 @@ impl PacketReceiver {
     }
 
     pub fn dump_raw_data(p: &::std::path::Path) -> crate::Result<()> {
-        let f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
+        let mut f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
+        let _totpkt : usize = ::bincode::deserialize_from(&mut f)?;
         let v : Vec<Info> = ::bincode::deserialize_from(f)?;
         for inf in v {
             println!("{} {} {}", inf.seqn, inf.st_us as f64 / 1000.0, inf.rt_us as f64 / 1000.0);
