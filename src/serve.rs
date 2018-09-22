@@ -18,6 +18,8 @@ use ::rand::Rng;
 use ::std::rc::Rc;
 use ::std::time::{Duration,Instant};
 
+use crate::experiment::SmallishDuration;
+
 #[derive(Debug, StructOpt)]
 pub struct Cmd {
     /// UDP port to listen
@@ -212,7 +214,11 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                         rp = ExperimentReply::ResourceLimits{msg:e.to_string()};
                     } else if rq.session_id.is_some() && pending == &Some(PendingExperiment{cla,sid:rq.session_id.unwrap()}) {
                         let oe = st.start_experiment(cla,&mut udp,rq)?;
-                        rp = ExperimentReply::Accepted{session_id: oe.info.session_id.unwrap()};
+                        let remaining_warmup_time_us = (Instant::now()- oe.start_time).as_us();
+                        rp = ExperimentReply::Accepted{
+                            session_id: oe.info.session_id.unwrap(),
+                            remaining_warmup_time_us,
+                        };
                     } else {
                         if pending.is_none() || pending.as_ref().unwrap().cla != cla {
                             *pending = Some(PendingExperiment{cla, sid:rnd.gen()});
@@ -237,7 +243,11 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                         let rq : ExperimentInfo = from_slice(msg)?;
                         let rp;
                         if rq == oe.info {
-                            rp = ExperimentReply::IsOngoing;
+                            let elapsed_time_us = (Instant::now() - oe.start_time).as_us();
+                            rp = ExperimentReply::IsOngoing {
+                                session_id: oe.info.session_id.unwrap(),
+                                elapsed_time_us,
+                            };
                         } else {
                             eprintln!("{:?}", rq);
                             eprintln!("!=");

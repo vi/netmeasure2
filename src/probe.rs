@@ -49,6 +49,8 @@ pub fn probe(cmd:Cmd) -> Result<()> {
     let start = Instant::now() + Duration::from_micros(c2s.experiment.pending_start_in_microseconds as u64);
     let end = start + c2s.experiment.duration();
 
+    let mut experiment_start_for_receiver = start;
+
     eprint!("Sending request");
     loop {
         let now = Instant::now();
@@ -76,15 +78,22 @@ pub fn probe(cmd:Cmd) -> Result<()> {
 
                 match s2c.reply {
                     ExperimentReply::Busy => bail!("Server busy"),
-                    ExperimentReply::Accepted{session_id} => {
+                    ExperimentReply::Accepted{session_id,remaining_warmup_time_us} => {
                         assert!(Some(session_id) == c2s.experiment.session_id);
+                        experiment_start_for_receiver =
+                            Instant::now() + Duration::from_micros(remaining_warmup_time_us as u64);
+                        break;
+                    },
+                    ExperimentReply::IsOngoing{session_id,elapsed_time_us} => {
+                        assert!(Some(session_id) == c2s.experiment.session_id);
+                        experiment_start_for_receiver =
+                            Instant::now() - Duration::from_micros(elapsed_time_us as u64);
                         break;
                     },
                     ExperimentReply::ResourceLimits{msg} => {
                         eprintln!("\nResource limits: {}", msg);
                         bail!("Parameters out of range");
                     },
-                    ExperimentReply::IsOngoing => break,
                     ExperimentReply::HereAreResults{stats:_} => bail!("Results not expected now"),
                     ExperimentReply::RetryWithASessionId{session_id} => {
                         c2s.experiment.session_id = Some(session_id);
@@ -109,7 +118,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
             crate::experiment::receiver::PacketReceiverParams {
                 num_packets: c2s.experiment.totalpackets,
                 session_id: c2s.experiment.session_id.unwrap(),
-                experiment_start: start,
+                experiment_start: experiment_start_for_receiver,
             }
         ))
     } else { None };
@@ -186,12 +195,14 @@ pub fn probe(cmd:Cmd) -> Result<()> {
 
                 match s2c.reply {
                     ExperimentReply::Busy => bail!("Server busy 2"),
-                    ExperimentReply::Accepted{session_id} => bail!("Accepted 2?"),
+                    ExperimentReply::Accepted{session_id,remaining_warmup_time_us} => bail!("Accepted 2?"),
                     ExperimentReply::ResourceLimits{msg} => {
                         eprintln!("\nResource limits: {}", msg);
                         bail!("Parameters out of range 2");
                     },
-                    ExperimentReply::IsOngoing => continue,
+                    ExperimentReply::IsOngoing{session_id,elapsed_time_us} => {
+                        continue;
+                    },
                     ExperimentReply::HereAreResults{stats} => {
                         if let Some(ref x) = stats {
                             ensure!(Some(x.session_id) == c2s.experiment.session_id,

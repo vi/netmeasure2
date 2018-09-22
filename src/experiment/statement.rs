@@ -72,7 +72,9 @@ pub struct ExperimentInfo {
 #[serde(tag = "type")]
 pub enum ExperimentReply {
     /// Experiment is accepted by server
-    Accepted{session_id:u64},
+    Accepted{session_id:u64, remaining_warmup_time_us:u32},
+    /// Experiment is already running, but not completed yet. Retry later to get results.
+    IsOngoing{session_id:u64, elapsed_time_us:u32},
     /// Server is busy with another experiment
     Busy,
     /// Experiment is denied because of parameters are too aggressive
@@ -82,8 +84,6 @@ pub enum ExperimentReply {
     RetryWithASessionId{session_id:u64},
     /// Results are already vailable. None = receiving at server side was not requested
     HereAreResults{stats:Option<Rc<super::results::ExperimentResults>>},
-    /// Experiment is already running, but not completed yet. Retry later to get results.
-    IsOngoing,
     /// There was some failure on server
     Failed{msg:String},
 }
