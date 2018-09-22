@@ -60,7 +60,7 @@ pub fn dump_some_results() -> Result<()>  {
     for v in r.delay_model.delta_popularity.iter_mut() { *v = rnd.gen(); }
     for v in r.loss_model.nonloss          .iter_mut() { *v = rnd.gen(); }
     for v in r.loss_model.loss             .iter_mut() { *v = rnd.gen(); }
-    let rpl = super::statement::ExperimentReply::HereAreResults(Some(Rc::new(r)));
+    let rpl = super::statement::ExperimentReply::HereAreResults{stats:Some(Rc::new(r))};
     let s2c = crate::ServerToClient::from(rpl);
     ::serde_cbor::ser::to_writer_sd(&mut ::std::io::stdout().lock(), &s2c)?;
     Ok(())

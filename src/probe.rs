@@ -24,6 +24,9 @@ pub struct Cmd {
 
     #[structopt(long="output", short="o", parse(from_os_str))]
     pub output: Option<::std::path::PathBuf>,
+
+    #[structopt(long="save-raw-stats",short="R",parse(from_os_str))]
+    save_raw_stats: Option<::std::path::PathBuf>,
 }
 
 pub fn probe(cmd:Cmd) -> Result<()> {
@@ -82,9 +85,13 @@ pub fn probe(cmd:Cmd) -> Result<()> {
                         bail!("Parameters out of range");
                     },
                     ExperimentReply::IsOngoing => break,
-                    ExperimentReply::HereAreResults(_) => bail!("Results not expected now"),
+                    ExperimentReply::HereAreResults{stats:_} => bail!("Results not expected now"),
                     ExperimentReply::RetryWithASessionId{session_id} => {
                         c2s.experiment.session_id = Some(session_id);
+                    },
+                    ExperimentReply::Failed{msg} => {
+                        eprintln!("{}",msg);
+                        bail!("Fail reply from server");
                     },
                 };
             },
@@ -103,7 +110,6 @@ pub fn probe(cmd:Cmd) -> Result<()> {
                 num_packets: c2s.experiment.totalpackets,
                 session_id: c2s.experiment.session_id.unwrap(),
                 experiment_start: start,
-                experiment_stop: end,
             }
         ))
     } else { None };
@@ -137,6 +143,12 @@ pub fn probe(cmd:Cmd) -> Result<()> {
         if !request_results && now > end {
             eprintln!("Experiment finished");
             request_results = true;
+
+            if let Some(ref srs) = cmd.save_raw_stats {
+                if let Some(ref mut rcv) = rcv {
+                    rcv.save_raw_data(srs);
+                }
+            }
         }
 
         if request_results && now > end + Duration::from_secs(10) {
@@ -156,6 +168,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
                     if let Some(ref mut rcv) = rcv {
                         rcv.recv(msg);
                     }
+                    continue;
                 }
 
                 // TODO: RTP mode
@@ -179,16 +192,20 @@ pub fn probe(cmd:Cmd) -> Result<()> {
                         bail!("Parameters out of range 2");
                     },
                     ExperimentReply::IsOngoing => continue,
-                    ExperimentReply::HereAreResults(results) => {
-                        if let Some(ref x) = results {
+                    ExperimentReply::HereAreResults{stats} => {
+                        if let Some(ref x) = stats {
                             ensure!(Some(x.session_id) == c2s.experiment.session_id,
                                 "wrong session id in results"
                             );
                         }
-                        results_ = results;
+                        results_ = stats;
                         break;
                     },
                     ExperimentReply::RetryWithASessionId{session_id} => bail!("Unexpected retryWSId"),
+                    ExperimentReply::Failed{msg} => {
+                        eprintln!("{}",msg);
+                        bail!("Fail reply from server 2");
+                    },
                 };
             },
             Err(ref e) if e.kind() == ::std::io::ErrorKind::WouldBlock => {

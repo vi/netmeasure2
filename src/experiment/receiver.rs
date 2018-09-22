@@ -16,7 +16,6 @@ pub struct Info {
 pub struct PacketReceiver {
     v: Vec<Info>,
     start: Instant,
-    stop: Instant,
     session_id: u64,
     ctr: usize,
 }
@@ -25,7 +24,6 @@ pub struct PacketReceiverParams {
     pub num_packets: u32,
     pub session_id: u64,
     pub experiment_start: Instant,
-    pub experiment_stop: Instant,
 }
 
 impl PacketReceiver {
@@ -47,16 +45,11 @@ impl PacketReceiver {
     pub fn new(prp: PacketReceiverParams) -> Self {
         PacketReceiver {
             start: prp.experiment_start,
-            stop: prp.experiment_stop,
             // not just with_capacity to avoid page faults while filling it in
             v: vec![Default::default(); prp.num_packets as usize],
             session_id: prp.session_id,
             ctr: 0,
         }
-    }
-
-    pub fn expired(&self) -> bool {
-        Instant::now() >= self.stop
     }
 
     pub fn analyse(&self) -> ExperimentResults {

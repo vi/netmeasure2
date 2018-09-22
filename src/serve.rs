@@ -35,13 +35,21 @@ pub struct Cmd {
     save_raw_stats: Option<::std::path::PathBuf>,
 }
 
-struct CompletedExperiment(ExperimentInfo, Rc<ExperimentResults>);
+struct CompletedExperiment(ExperimentInfo, Option<Rc<ExperimentResults>>);
 
 struct OngoingExperiment {
     start_time : Instant,
+    stop_time: Instant,
     info: ExperimentInfo,
     cla : SocketAddr,
-    rcv: PacketReceiver,
+    rcv: Option<PacketReceiver>,
+    snd: Option<::std::thread::JoinHandle<crate::Result<()>>>,
+}
+
+impl OngoingExperiment {
+    fn expired(&self) -> bool {
+        Instant::now() > self.stop_time
+    }
 }
 
 #[derive(Eq,PartialEq)]
@@ -61,11 +69,23 @@ impl State {
             State::ExperimentIsOngoing(oe) => {
                 println!("Experiment completed");
 
-                if let Some(srs) = cmd.save_raw_stats.as_ref() {
-                    oe.rcv.save_raw_data(srs);
+                let ce;
+                if let Some(ref mut rcv) = oe.rcv {
+                    if let Some(srs) = cmd.save_raw_stats.as_ref() {
+                        rcv.save_raw_data(srs);
+                    }
+                    ce = CompletedExperiment(oe.info.clone(), Some(Rc::new(rcv.analyse())));
+                } else {
+                    ce = CompletedExperiment(oe.info.clone(), None);
                 }
 
-                let ce = CompletedExperiment(oe.info.clone(), Rc::new(oe.rcv.analyse()));
+                if let Some(snd) = oe.snd.take() {
+                    match snd.join() {
+                        Err(e) => { bail!("sender thread panicked"); },
+                        Ok(x) => x?,
+                    }
+                };
+
                 *self = State::Idle(Some(ce), None);
                 udp.set_read_timeout(None)?;
             },
@@ -90,7 +110,7 @@ impl State {
                 );
                 let experiment_stop = experiment_start + rq.duration();
 
-                if rq.direction.server_needs_sender() {
+                let snd = if rq.direction.server_needs_sender() {
                     let sender = crate::experiment::sender::Sender {
                         delay_between_packets: Duration::from_micros(rq.packetdelay_us),
                         packetsize: rq.packetsize as usize,
@@ -99,25 +119,31 @@ impl State {
                         experiment_start,
                     };
                     let udp2 = udp.try_clone()?;
-                    ::std::thread::spawn(move || {
+                    Some(::std::thread::spawn(move || {
                         if let Err(e) = sender.run(udp2, cla) {
                             eprintln!("Sender thread failed: {}", e);
+                            return Err(e);
                         }
-                    });
-                }
+                        Ok(())
+                    }))
+                } else { None };
 
-                let prp = PacketReceiverParams {
-                    experiment_start,
-                    experiment_stop,
-                    session_id: rq.session_id.unwrap(),
-                    num_packets: rq.totalpackets,
-                };
+                let rcv = if rq.direction.server_needs_receiver() {
+                    let prp = PacketReceiverParams {
+                        experiment_start,
+                        session_id: rq.session_id.unwrap(),
+                        num_packets: rq.totalpackets,
+                    };
+                    Some(PacketReceiver::new(prp))
+                } else { None };
 
                 let mut oe = OngoingExperiment {
                     cla,
                     info: rq,
-                    start_time:  Instant::now(),
-                    rcv: PacketReceiver::new(prp),
+                    start_time:  experiment_start,
+                    stop_time: experiment_stop,
+                    rcv,
+                    snd,
                 };
                 *self = State::ExperimentIsOngoing(oe);
             }
@@ -142,13 +168,14 @@ pub fn serve(cmd:Cmd) -> Result<()> {
     let mut rnd = ::rand::EntropyRng::new();
 
     loop {
+        let mut prev_cla = None;
         match (try {
             let (ret,cla) = match udp.recv_from(&mut buf) {
                 Ok(x) => x,
                 Err(ref e) if e.kind() == ::std::io::ErrorKind::WouldBlock => {
                     match st {
                         State::ExperimentIsOngoing(ref oe) => {
-                            if oe.rcv.expired() {
+                            if oe.expired() {
                                 st.complete_experiment(&mut udp,&cmd)?;
                             };
                         },
@@ -160,6 +187,7 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                 },
                 Err(e) => Err(e)?,
             };
+            prev_cla = Some(cla);
             let msg = &buf[0..ret];
             match &mut st {
                 State::Idle(ref laste,ref mut pending) => {
@@ -178,7 +206,7 @@ pub fn serve(cmd:Cmd) -> Result<()> {
 
                     let rp;
                     if laste.is_some() && laste.as_ref().unwrap().0 == rq {
-                        rp = ExperimentReply::HereAreResults(Some(laste.as_ref().unwrap().1.clone()));
+                        rp = ExperimentReply::HereAreResults{stats: laste.as_ref().unwrap().1.clone()};
                     } else
                     if let Err(e) = rq.check_limits(&cmd) {
                         rp = ExperimentReply::ResourceLimits{msg:e.to_string()};
@@ -219,14 +247,16 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                         }
                         udp.reply(rp, cla)?;
 
-                        if oe.rcv.expired() {
+                        if oe.expired() {
                             st.complete_experiment(&mut udp, &cmd)?;
                         }
                         continue;
                     }
                     
                     if &msg[0..3] == b"\x00\x00\x00" {
-                        oe.rcv.recv(msg);
+                        if let Some(ref mut rcv) = oe.rcv {
+                            rcv.recv(msg);
+                        }
                         continue;
                     }
 
@@ -241,6 +271,9 @@ pub fn serve(cmd:Cmd) -> Result<()> {
             Ok(()) => (),
             Err(e) => {
                 println!("error: {} {:?}", identity::<&Error>(&e), &e);
+                if let Some(cla) = prev_cla {
+                    let _  = udp.reply(ExperimentReply::Failed{msg:format!("{}", e)}, cla);
+                }
             },
         }
     }
