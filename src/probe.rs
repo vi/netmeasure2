@@ -5,6 +5,7 @@ use ::std::time::{Duration,Instant};
 use crate::experiment::SmallishDuration;
 use crate::experiment::statement::{ExperimentInfo,ExperimentReply,ExperimentDirection};
 use crate::experiment::results::ExperimentResults;
+use ::std::rc::Rc;
 
 #[derive(Debug, StructOpt)]
 pub struct Cmd {
@@ -96,31 +97,50 @@ pub fn probe(cmd:Cmd) -> Result<()> {
     eprintln!();
     eprintln!("Experiment started");
 
-    let udp2 = udp.try_clone()?;
-    let serv2 = cmd.server;
-    let sender = crate::experiment::sender::Sender {
-        delay_between_packets: Duration::from_micros(c2s.experiment.packetdelay_us),
-        packetcount: c2s.experiment.totalpackets,
-        packetsize: c2s.experiment.packetsize as usize,
-        rtpmimic: c2s.experiment.rtpmimic,
-        experiment_start: start,
-    };
-    ::std::thread::spawn(move || {
-        if let Err(e) = sender.run(udp2, serv2) {
-            eprintln!("Sender thread: {}", e);
-        }
-    });
+    let mut rcv = if c2s.experiment.direction.client_needs_receiver() {
+        Some(crate::experiment::receiver::PacketReceiver::new(
+            crate::experiment::receiver::PacketReceiverParams {
+                num_packets: c2s.experiment.totalpackets,
+                session_id: c2s.experiment.session_id.unwrap(),
+                experiment_start: start,
+                experiment_stop: end,
+            }
+        ))
+    } else { None };
+
+    let snd = if c2s.experiment.direction.client_needs_sender() {
+        let udp2 = udp.try_clone()?;
+        let serv2 = cmd.server;
+        let sender = crate::experiment::sender::Sender {
+            delay_between_packets: Duration::from_micros(c2s.experiment.packetdelay_us),
+            packetcount: c2s.experiment.totalpackets,
+            packetsize: c2s.experiment.packetsize as usize,
+            rtpmimic: c2s.experiment.rtpmimic,
+            experiment_start: start,
+        };
+        Some(::std::thread::spawn(move || {
+            if let Err(e) = sender.run(udp2, serv2) {
+                eprintln!("Sender thread: {}", e);
+                return Err(e);
+            };
+            Ok(())
+        }))
+    } else { None };
 
     udp.set_read_timeout(Some(Duration::from_secs(1)))?;
 
     let mut request_results = false;
 
-    let results_ : ::std::rc::Rc<ExperimentResults>;
+    let results_ : Option<Rc<ExperimentResults>>;
     loop {
         let now = Instant::now();
         if !request_results && now > end {
             eprintln!("Experiment finished");
             request_results = true;
+        }
+
+        if request_results && now > end + Duration::from_secs(10) {
+            bail!("Timed out waiting for results");
         }
 
         match udp.recv_from(&mut buf) {
@@ -129,6 +149,19 @@ pub fn probe(cmd:Cmd) -> Result<()> {
 
                 if from != cmd.server {
                     eprintln!("foreign packet");
+                    continue;
+                }
+
+                if &msg[0..3] == b"\x00\x00\x00" {
+                    if let Some(ref mut rcv) = rcv {
+                        rcv.recv(msg);
+                    }
+                }
+
+                // TODO: RTP mode
+
+                if &msg[0..3] != b"\xd9\xd9\xf7" {
+                    eprintln!("Unexpected packet");
                     continue;
                 }
 
@@ -147,9 +180,11 @@ pub fn probe(cmd:Cmd) -> Result<()> {
                     },
                     ExperimentReply::IsOngoing => continue,
                     ExperimentReply::HereAreResults(results) => {
-                        ensure!(Some(results.session_id) == c2s.experiment.session_id,
-                            "wrong session id in results"
-                        );
+                        if let Some(ref x) = results {
+                            ensure!(Some(x.session_id) == c2s.experiment.session_id,
+                                "wrong session id in results"
+                            );
+                        }
                         results_ = results;
                         break;
                     },
@@ -166,9 +201,17 @@ pub fn probe(cmd:Cmd) -> Result<()> {
     }
     eprintln!("Results received");
 
-    let final_result = crate::experiment::results::BidirectionalResults {
-        to_server: Some(results_),
-        from_server: None,
+    if let Some(snd) = snd {
+        match snd.join() {
+            Err(e) => { bail!("sender thread panicked"); },
+            Ok(x) => x?,
+        }
+    }
+
+    let final_result = crate::experiment::results::ResultsForStoring {
+        to_server: results_,
+        from_server: rcv.map(|rcv|Rc::new(rcv.analyse())),
+        conditions: c2s.experiment,
     };
 
     let out : Box<dyn(::std::io::Write)>;

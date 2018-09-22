@@ -6,11 +6,11 @@ use ::byteorder::{BE,ByteOrder};
 
 use crate::experiment::SmallishDuration;
 
-#[derive(Copy,Clone,Default,Debug)]
-struct Info {
-    rt_us: u32,
-    st_us: u32,
+#[derive(Copy,Clone,Default,Debug,Serialize,Deserialize)]
+pub struct Info {
     seqn: u32,
+    st_us: u32,
+    rt_us: u32,
 }
 
 pub struct PacketReceiver {
@@ -31,6 +31,7 @@ pub struct PacketReceiverParams {
 impl PacketReceiver {
     pub fn recv(&mut self, pkt: &[u8]) {
         assert!(pkt.len() >= 16);
+        if self.ctr >= self.v.len() { return }
         let seqn = BE::read_u32(&pkt[8..12]);
         let st_us = BE::read_u32(&pkt[12..16]);
 
@@ -80,5 +81,27 @@ impl PacketReceiver {
             delay_model,
             total_received_packets: self.ctr as u32,
         }
+    }
+
+    pub fn save_raw_data(&self, dir: &::std::path::Path) {
+        if let Err(e) = (try {
+            let p = dir.join(format!("{}.dat",self.session_id));
+            let f = ::std::fs::File::create(p)?;
+            let f = ::std::io::BufWriter::new(f);
+            
+            ::bincode::serialize_into(f, &self.v[0..self.ctr])?;
+        }) {
+            let e : ::failure::Error = e;
+            eprintln!("Error saving raw receive data: {}", e);
+        }
+    }
+
+    pub fn dump_raw_data(p: &::std::path::Path) -> crate::Result<()> {
+        let f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
+        let v : Vec<Info> = ::bincode::deserialize_from(f)?;
+        for inf in v {
+            println!("{} {} {}", inf.seqn, inf.st_us as f64 / 1000.0, inf.rt_us as f64 / 1000.0);
+        }
+        Ok(())
     }
 }

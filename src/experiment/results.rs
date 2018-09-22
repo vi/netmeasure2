@@ -42,10 +42,11 @@ pub struct ExperimentResults {
     pub total_received_packets: u32,
 }
 
-#[derive(Debug,Default,Serialize,Deserialize)]
-pub struct BidirectionalResults {
+#[derive(Debug,Serialize,Deserialize)]
+pub struct ResultsForStoring {
     pub to_server: Option<Rc<ExperimentResults>>,
     pub from_server: Option<Rc<ExperimentResults>>,
+    pub conditions: super::statement::ExperimentInfo,
 }
 
 const ER_SIZE : usize = ::std::mem::size_of::<ExperimentResults>() * 3/2 + 64;
@@ -59,7 +60,7 @@ pub fn dump_some_results() -> Result<()>  {
     for v in r.delay_model.delta_popularity.iter_mut() { *v = rnd.gen(); }
     for v in r.loss_model.nonloss          .iter_mut() { *v = rnd.gen(); }
     for v in r.loss_model.loss             .iter_mut() { *v = rnd.gen(); }
-    let rpl = super::statement::ExperimentReply::HereAreResults(::std::rc::Rc::new(r));
+    let rpl = super::statement::ExperimentReply::HereAreResults(Some(Rc::new(r)));
     let s2c = crate::ServerToClient::from(rpl);
     ::serde_cbor::ser::to_writer_sd(&mut ::std::io::stdout().lock(), &s2c)?;
     Ok(())

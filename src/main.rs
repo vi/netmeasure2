@@ -43,6 +43,8 @@ extern crate spin_sleep;
 #[macro_use]
 extern crate derivative;
 
+extern crate bincode;
+
 const API_VERSION: u32 = 0;
 
 
@@ -97,6 +99,13 @@ enum Cmd {
     Numplay(numplay::Numplay),
 
     RDump,
+
+    /// Output statistics saved by -R option of probe or serve
+    #[structopt(name = "rawdump")]
+    DumpSavedRawStats{
+        #[structopt(parse(from_os_str))]
+        file: ::std::path::PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -107,6 +116,7 @@ fn main() -> Result<()> {
         Cmd::Probe(x) =>  probe::probe(x)?,
         Cmd::Numplay(x) => numplay::numplay(x)?,
         Cmd::RDump => experiment::results::dump_some_results()?,
+        Cmd::DumpSavedRawStats{file} => experiment::receiver::PacketReceiver::dump_raw_data(&file)?,
     };
     Ok(())
 }

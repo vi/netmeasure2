@@ -2,7 +2,7 @@
 name = "netmeasure2"
 version = "0.1.0"
 authors = ["Vitaly _Vi Shukela <vi0oss@gmail.com>"]
-license = "GPL v3"
+license = "GPL-3.0-or-later"
 edition = "2018"
 
 [dependencies]
@@ -22,6 +22,7 @@ rand_derive = "0.3.1"
 byteorder = "1.2.6"
 spin_sleep = "0.3.7"
 derivative = "1.0.0"
+bincode = "1.0.1"
 
 [workspace]
 members = ["miniserde_tools"]
