@@ -56,7 +56,7 @@ impl PacketReceiver {
         //println!("{:#?}",self.v);
 
         let delta_popularity = [0.0;31];
-        let value_popularity = [0.0;24];
+        let value_popularity = [0.0;30];
         let loss = [0.0;30];
         let nonloss = [0.0;30];
 
@@ -67,6 +67,7 @@ impl PacketReceiver {
         let loss_model = LossModel {
             loss,
             nonloss,
+            loss_prob : 0.0,
         };
         ExperimentResults {
             session_id: self.session_id,

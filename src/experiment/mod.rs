@@ -3,7 +3,7 @@ pub mod results;
 pub mod sender;
 pub mod receiver;
 pub mod analyser;
-
+pub mod visualiser;
 
 pub trait SmallishDuration {
     /// as_micros is busy
