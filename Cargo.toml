@@ -23,6 +23,7 @@ byteorder = "1.2.6"
 spin_sleep = "0.3.7"
 derivative = "1.0.0"
 bincode = "1.0.1"
+itertools = "0.5.10"
 
 [workspace]
 members = ["miniserde_tools"]

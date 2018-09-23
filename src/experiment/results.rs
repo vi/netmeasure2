@@ -23,7 +23,7 @@ pub struct DelayModel {
 
 /// Hard-coded loss (or non-loss) cluster ranges
 counted_array!(
-const CLUSTERS: [u16; _] = [
+pub const CLUSTERS: [u16; _] = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 120,
     150, 200, 300, 400, 65535,
 ]);

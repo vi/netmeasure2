@@ -45,6 +45,8 @@ extern crate derivative;
 
 extern crate bincode;
 
+extern crate itertools;
+
 const API_VERSION: u32 = 0;
 
 
@@ -106,6 +108,13 @@ enum Cmd {
         #[structopt(parse(from_os_str))]
         file: ::std::path::PathBuf,
     },
+
+    /// Summarize data from -R rawdump
+    #[structopt(name = "analyse")]
+    AnalyseRaw {
+        #[structopt(parse(from_os_str))]
+        file: ::std::path::PathBuf,
+    }
 }
 
 fn main() -> Result<()> {
@@ -117,6 +126,7 @@ fn main() -> Result<()> {
         Cmd::Numplay(x) => numplay::numplay(x)?,
         Cmd::RDump => experiment::results::dump_some_results()?,
         Cmd::DumpSavedRawStats{file} => experiment::receiver::PacketReceiver::dump_raw_data(&file)?,
+        Cmd::AnalyseRaw{file} => experiment::analyser::read_and_analyse(&file)?,
     };
     Ok(())
 }

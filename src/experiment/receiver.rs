@@ -8,9 +8,9 @@ use crate::experiment::SmallishDuration;
 
 #[derive(Copy,Clone,Default,Debug,Serialize,Deserialize)]
 pub struct Info {
-    seqn: u32,
-    st_us: u32,
-    rt_us: u32,
+    pub seqn: u32,
+    pub st_us: u32,
+    pub rt_us: u32,
 }
 
 pub struct PacketReceiver {

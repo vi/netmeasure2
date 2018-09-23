@@ -2,6 +2,7 @@ pub mod statement;
 pub mod results;
 pub mod sender;
 pub mod receiver;
+pub mod analyser;
 
 
 pub trait SmallishDuration {

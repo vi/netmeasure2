@@ -33,6 +33,10 @@ pub struct Cmd {
     #[structopt(long = "bwlimit", default_value = "50000")]
     bwlimit: u32,
 
+    /// Minimum time between packets
+    #[structopt(long = "min-packetdelay-us", default_value = "200")]
+    min_packetdelay_us: u64,
+
     #[structopt(long="save-raw-stats",short="R",parse(from_os_str))]
     save_raw_stats: Option<::std::path::PathBuf>,
 }
@@ -214,7 +218,11 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                         rp = ExperimentReply::ResourceLimits{msg:e.to_string()};
                     } else if rq.session_id.is_some() && pending == &Some(PendingExperiment{cla,sid:rq.session_id.unwrap()}) {
                         let oe = st.start_experiment(cla,&mut udp,rq)?;
-                        let remaining_warmup_time_us = (Instant::now()- oe.start_time).as_us();
+                        let mut remaining_warmup_time_us = 0;
+                        let now = Instant::now();
+                        if oe.start_time > now {
+                            remaining_warmup_time_us = (oe.start_time-now).as_us();
+                        }
                         rp = ExperimentReply::Accepted{
                             session_id: oe.info.session_id.unwrap(),
                             remaining_warmup_time_us,
@@ -305,6 +313,9 @@ impl ExperimentInfo {
     pub fn check_limits(&self, cmd: &Cmd) -> ::std::result::Result<(),&'static str> {
         let effective_ps = (self.packetsize+32).max(64);
         if self.packetdelay_us == 0 { return Err("zero packet delay") }
+        if self.packetdelay_us < cmd.min_packetdelay_us {
+            return Err("packetdelay too low");
+        }
         let pps = 1000_000.0 / (self.packetdelay_us as f64);
         let bw_kbps = ((effective_ps as f64) * pps * 8.0 / 1024.0) as u32;
         let maxdur = Duration::from_secs(cmd.timelimit.into());
