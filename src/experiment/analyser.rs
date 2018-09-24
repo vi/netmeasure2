@@ -11,7 +11,7 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
     for Info{seqn, st_us, rt_us} in v {
         let delay = (rt_us / 1000) as i32 - (st_us / 1000) as i32;
         tmp.push((*seqn, delay));
-        if mindelay_ms > delay { mindelay_ms = delay }
+        if mindelay_ms > delay { mindelay_ms = delay };
     }
     if (mindelay_ms < 0) {
         for (_seqn,ref mut d) in tmp.iter_mut() {
@@ -89,11 +89,13 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
     }
 
     // Step 4: accumulate statistics and delay values and deltas;
+    let mut delaysum = 0.0;
     let mut prevdelay = 0;
     for (_,d) in tmp.iter() {
         register(*d as i32, &mut r.delay_model.value_popularity,&DELAY_VALUES);
         register((*d - prevdelay) as i32, &mut r.delay_model.delta_popularity,&DELAY_DELTAS);
         prevdelay = *d;
+        delaysum += *d as f32;
     }
 
     // Step 5: Normalize results
@@ -115,6 +117,7 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
     normalize(&mut r.delay_model.delta_popularity);
     r.total_received_packets=tmp.len() as u32;
     r.loss_model.loss_prob = 1.0 - tmp.len() as f32 / total as f32;
+    r.delay_model.mean_delay_us = delaysum / tmp.len() as f32;
     r
 }
 

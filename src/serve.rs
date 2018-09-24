@@ -223,6 +223,7 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                         continue;
                     }
                     let rq : ExperimentInfo = s2c.experiment;
+                    let seqn_for_rtt = s2c.seqn_for_rtt;
 
                     let rp;
                     if laste.is_some() && laste.as_ref().unwrap().info == rq {
@@ -250,12 +251,12 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                         }
                         rp = ExperimentReply::RetryWithASessionId{session_id: pending.as_ref().unwrap().sid}
                     }
-                    udp.reply(rp, cla)?;
+                    udp.reply(rp, cla, seqn_for_rtt)?;
                 },
                 State::ExperimentIsOngoing(oe) => {
                     if oe.cla != cla {
                         let rp = ExperimentReply::Busy;
-                        udp.reply(rp, cla)?;
+                        udp.reply(rp, cla, 0)?;
                         continue;
                     }
                     
@@ -265,7 +266,13 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                     }
 
                     if &msg[0..3] == b"\xd9\xd9\xf7" {
-                        let rq : ExperimentInfo = from_slice(msg)?;
+                        let s2c : super::ClientToServer = from_slice(msg)?;
+                        if s2c.api_version != crate::API_VERSION {
+                            bail!("Invalid API version");
+                        }
+                        let rq : ExperimentInfo = s2c.experiment;
+                        let seqn_for_rtt = s2c.seqn_for_rtt;
+
                         let rp;
                         if rq == oe.info {
                             let n = Instant::now();
@@ -289,7 +296,7 @@ pub fn serve(cmd:Cmd) -> Result<()> {
 
                             rp = ExperimentReply::Busy;
                         }
-                        udp.reply(rp, cla)?;
+                        udp.reply(rp, cla, seqn_for_rtt)?;
 
                         if oe.expired2() {
                             st.complete_experiment(&mut udp, &cmd)?;
@@ -316,7 +323,7 @@ pub fn serve(cmd:Cmd) -> Result<()> {
             Err(e) => {
                 println!("error: {} {:?}", identity::<&Error>(&e), &e);
                 if let Some(cla) = prev_cla {
-                    let _  = udp.reply(ExperimentReply::Failed{msg:format!("{}", e)}, cla);
+                    let _  = udp.reply(ExperimentReply::Failed{msg:format!("{}", e)}, cla, 0);
                 }
             },
         }
@@ -324,12 +331,12 @@ pub fn serve(cmd:Cmd) -> Result<()> {
 }
 
 trait ExperimentNegotiation {
-    fn reply(&mut self, rp: ExperimentReply, cla: SocketAddr) -> Result<()>;
+    fn reply(&mut self, rp: ExperimentReply, cla: SocketAddr, seqn_for_rtt: u32) -> Result<()>;
 }
 
 impl ExperimentNegotiation for UdpSocket {
-    fn reply(&mut self, rp: ExperimentReply, cla: SocketAddr) -> Result<()> {
-        let s2c = crate::ServerToClient::from(rp);
+    fn reply(&mut self, rp: ExperimentReply, cla: SocketAddr, seqn_for_rtt: u32) -> Result<()> {
+        let s2c = crate::ServerToClient::from((rp,seqn_for_rtt));
         self.send_to(&to_vec_sd(&s2c)?[..], cla)?;
         Ok(())
     }

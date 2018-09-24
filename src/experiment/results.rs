@@ -20,6 +20,7 @@ pub const DELAY_VALUES: [i32; _] = [
 pub struct DelayModel {
     pub value_popularity: [f32; DELAY_VALUES.len()],
     pub delta_popularity: [f32; DELAY_DELTAS.len()],
+    pub mean_delay_us: f32,
 }
 
 /// Hard-coded loss (or non-loss) cluster ranges. Must be sorted.
@@ -50,6 +51,7 @@ pub struct ResultsForStoring {
     pub to_server: Option<Rc<ExperimentResults>>,
     pub from_server: Option<Rc<ExperimentResults>>,
     pub conditions: super::statement::ExperimentInfo,
+    pub rtt_us: u32,
 }
 
 const ER_SIZE : usize = ::std::mem::size_of::<ExperimentResults>() * 3/2 + 64;
@@ -67,7 +69,7 @@ pub fn dump_some_results() -> Result<()>  {
         stats:Some(Rc::new(r)),
         send_lost: None,
     };
-    let s2c = crate::ServerToClient::from(rpl);
+    let s2c = crate::ServerToClient::from((rpl,0));
     ::serde_cbor::ser::to_writer_sd(&mut ::std::io::stdout().lock(), &s2c)?;
     Ok(())
 }

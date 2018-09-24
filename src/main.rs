@@ -47,7 +47,7 @@ extern crate bincode;
 
 extern crate itertools;
 
-const API_VERSION: u32 = 2;
+const API_VERSION: u32 = 3;
 
 
 use self::enum_unitary::EnumUnitary;
@@ -72,18 +72,33 @@ struct ClientToServer {
     #[serde(flatten)]
     experiment: ExperimentInfo,
     api_version: u32,
+    seqn_for_rtt: u32,
 }
 #[derive(Debug, Serialize, Deserialize)]
 struct ServerToClient {
     #[serde(flatten)]
     reply: ExperimentReply,
     api_version: u32,
+    seqn_for_rtt: u32,
 }
-impl From<ExperimentInfo> for ClientToServer {
-    fn from(experiment: ExperimentInfo) -> Self { ClientToServer { experiment, api_version: API_VERSION }}
+
+impl From<(ExperimentInfo,u32)> for ClientToServer {
+    fn from(x: (ExperimentInfo,u32)) -> Self {
+        ClientToServer { 
+            experiment: x.0,
+            api_version: API_VERSION,
+            seqn_for_rtt: x.1,
+        }
+    }
 }
-impl From<ExperimentReply> for ServerToClient {
-    fn from(reply: ExperimentReply) -> Self { ServerToClient { reply, api_version: API_VERSION }}
+impl From<(ExperimentReply,u32)> for ServerToClient {
+    fn from(x: (ExperimentReply,u32)) -> Self { 
+        ServerToClient {
+            reply: x.0,
+            api_version: API_VERSION,
+            seqn_for_rtt: x.1,
+        }
+    }
 }
 
 #[derive(Debug, StructOpt)]

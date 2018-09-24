@@ -48,6 +48,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
     let mut c2s = crate::ClientToServer {
         experiment: cmd.experiment,
         api_version: crate::API_VERSION,
+        seqn_for_rtt: 0,
     };
 
     let mut buf = [0; 1536];
@@ -58,6 +59,9 @@ pub fn probe(cmd:Cmd) -> Result<()> {
     let end = start + c2s.experiment.duration() + Duration::from_secs(1);
 
     let mut experiment_start_for_receiver = start;
+
+    let mut ts_for_rtt_send = ::std::collections::BTreeMap::<u32, Instant>::new();
+    let mut ts_for_rtt_recv = ::std::collections::BTreeMap::<u32, Instant>::new();
 
     eprint!("Sending request");
     loop {
@@ -70,6 +74,8 @@ pub fn probe(cmd:Cmd) -> Result<()> {
         c2s.experiment.pending_start_in_microseconds = ttg.as_us();
         eprint!(".");
         //eprintln!("{:?}", c2s);
+        c2s.seqn_for_rtt+=1;
+        ts_for_rtt_send.insert(c2s.seqn_for_rtt, Instant::now());
         udp.send_to(::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice(), cmd.server)?;
         match udp.recv_from(&mut buf) {
             Ok((ret,from)) => {
@@ -83,6 +89,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
                 if s2c.api_version != crate::API_VERSION {
                     bail!("Wrong API version");
                 }
+                ts_for_rtt_recv.insert(s2c.seqn_for_rtt, Instant::now());
 
                 match s2c.reply {
                     ExperimentReply::Busy => bail!("Server busy"),
@@ -152,6 +159,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
 
     let mut results_ : Option<Rc<ExperimentResults>>;
     let send_lost_: Option<u32>;
+
     loop {
         let now = Instant::now();
         if !request_results && now > end {
@@ -197,6 +205,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
                 if s2c.api_version != crate::API_VERSION {
                     bail!("Wrong API version ; 2");
                 }
+                ts_for_rtt_recv.insert(s2c.seqn_for_rtt, Instant::now());
 
                 match s2c.reply {
                     ExperimentReply::Busy => bail!("Server busy 2"),
@@ -229,6 +238,8 @@ pub fn probe(cmd:Cmd) -> Result<()> {
             },
             Err(ref e) if e.kind() == ::std::io::ErrorKind::WouldBlock => {
                 if request_results {
+                    c2s.seqn_for_rtt+=1;
+                    ts_for_rtt_send.insert(c2s.seqn_for_rtt, Instant::now());
                     udp.send_to(::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice(), cmd.server)?;
                 }
             },
@@ -261,10 +272,21 @@ pub fn probe(cmd:Cmd) -> Result<()> {
         r.loss_model.sendside_loss = lp as f32 / c2s.experiment.totalpackets as f32;
         *to_server = Rc::new(r);
     }
+    let rtt_us;
+    {
+        let mut count=0;
+        let mut dur = Duration::from_secs(0);
+        for (sq,ts) in ts_for_rtt_recv {
+            dur += ts - ts_for_rtt_send[&sq];
+            count+=1;
+        }
+        rtt_us = dur.as_us() / count;
+    }
     let mut final_result = crate::experiment::results::ResultsForStoring {
         to_server: results_,
         from_server,
         conditions: c2s.experiment,
+        rtt_us,
     };
 
     if cmd.visualise {

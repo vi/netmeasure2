@@ -132,7 +132,7 @@ impl ExperimentResults {
     pub fn visualise_delay(&self) {
         let mut delay_report = vec![];
 
-        delay_report.push(format!("Delay:"));
+        delay_report.push(format!("Delay (mean={}ms):", self.delay_model.mean_delay_us/1000.0));
         let mut prevskipped = false;
         for (i,&c) in DELAY_VALUES.iter().enumerate() {
             let v = self.delay_model.value_popularity[i];
@@ -197,6 +197,7 @@ impl ExperimentResults {
 impl ResultsForStoring {
     pub fn print_to_stdout(&self) {
         println!("Experiment params: {:?}", self.conditions);
+        println!("RTT={}ms", self.rtt_us/1000);
         fn q(r:&ExperimentResults) {
             println!(
                 "Total received packets: {} (loss {:3.2}%, send-side loss: {:3.2}%)", 
