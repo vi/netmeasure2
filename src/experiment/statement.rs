@@ -83,7 +83,7 @@ pub enum ExperimentReply {
     /// (to deter spoofed source addresses DoS amplification)
     RetryWithASessionId{session_id:u64},
     /// Results are already vailable. None = receiving at server side was not requested
-    HereAreResults{stats:Option<Rc<super::results::ExperimentResults>>},
+    HereAreResults{stats:Option<Rc<super::results::ExperimentResults>>, send_lost:Option<u32>},
     /// There was some failure on server
     Failed{msg:String},
 }

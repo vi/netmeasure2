@@ -27,9 +27,17 @@ pub struct Cmd {
 
     #[structopt(long="save-raw-stats",short="R",parse(from_os_str))]
     save_raw_stats: Option<::std::path::PathBuf>,
+
+    /// Format results nicely to stdout instead of JSON
+    #[structopt(short="S")]
+    visualise: bool,
 }
 
 pub fn probe(cmd:Cmd) -> Result<()> {
+    if cmd.visualise && cmd.output.is_some() {
+        bail!("-o and -S are currently incompatible");
+    }
+
     let udp = UdpSocket::bind(if cmd.ipv6 {
         SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, cmd.source_port, 0, 0))
     } else {
@@ -47,7 +55,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
     let s2c : crate::ServerToClient;
 
     let start = Instant::now() + Duration::from_micros(c2s.experiment.pending_start_in_microseconds as u64);
-    let end = start + c2s.experiment.duration();
+    let end = start + c2s.experiment.duration() + Duration::from_secs(1);
 
     let mut experiment_start_for_receiver = start;
 
@@ -94,7 +102,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
                         eprintln!("\nResource limits: {}", msg);
                         bail!("Parameters out of range");
                     },
-                    ExperimentReply::HereAreResults{stats:_} => bail!("Results not expected now"),
+                    ExperimentReply::HereAreResults{..} => bail!("Results not expected now"),
                     ExperimentReply::RetryWithASessionId{session_id} => {
                         c2s.experiment.session_id = Some(session_id);
                     },
@@ -134,11 +142,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
             experiment_start: start,
         };
         Some(::std::thread::spawn(move || {
-            if let Err(e) = sender.run(udp2, serv2) {
-                eprintln!("Sender thread: {}", e);
-                return Err(e);
-            };
-            Ok(())
+            sender.run(udp2, serv2)
         }))
     } else { None };
 
@@ -146,7 +150,8 @@ pub fn probe(cmd:Cmd) -> Result<()> {
 
     let mut request_results = false;
 
-    let results_ : Option<Rc<ExperimentResults>>;
+    let mut results_ : Option<Rc<ExperimentResults>>;
+    let send_lost_: Option<u32>;
     loop {
         let now = Instant::now();
         if !request_results && now > end {
@@ -195,20 +200,23 @@ pub fn probe(cmd:Cmd) -> Result<()> {
 
                 match s2c.reply {
                     ExperimentReply::Busy => bail!("Server busy 2"),
-                    ExperimentReply::Accepted{session_id,remaining_warmup_time_us} => bail!("Accepted 2?"),
-                    ExperimentReply::ResourceLimits{msg} => {
-                        eprintln!("\nResource limits: {}", msg);
-                        bail!("Parameters out of range 2");
+                    ExperimentReply::Accepted{session_id,remaining_warmup_time_us} => {
+                        continue;  
                     },
                     ExperimentReply::IsOngoing{session_id,elapsed_time_us} => {
                         continue;
                     },
-                    ExperimentReply::HereAreResults{stats} => {
+                    ExperimentReply::ResourceLimits{msg} => {
+                        eprintln!("\nResource limits: {}", msg);
+                        bail!("Parameters out of range 2");
+                    },
+                    ExperimentReply::HereAreResults{stats,send_lost} => {
                         if let Some(ref x) = stats {
                             ensure!(Some(x.session_id) == c2s.experiment.session_id,
                                 "wrong session id in results"
                             );
                         }
+                        send_lost_ = send_lost;
                         results_ = stats;
                         break;
                     },
@@ -229,30 +237,51 @@ pub fn probe(cmd:Cmd) -> Result<()> {
     }
     eprintln!("Results received");
 
+    let mut my_send_lost = None;
     if let Some(snd) = snd {
         match snd.join() {
             Err(e) => { bail!("sender thread panicked"); },
-            Ok(x) => x?,
+            Ok(x) => {
+                let lost = x?;
+                my_send_lost = Some(lost);
+            },
         }
     }
 
-    let final_result = crate::experiment::results::ResultsForStoring {
+    let mut from_server = None;
+    if let Some(rcv) = rcv {
+        let mut r = rcv.analyse();
+        let lp = send_lost_.unwrap();
+        r.loss_model.sendside_loss = lp as f32 / c2s.experiment.totalpackets as f32;
+        from_server = Some(Rc::new(r));
+    };
+    if let Some(to_server) = results_.as_mut() {
+        let lp = my_send_lost.unwrap();
+        let mut r = (**to_server).clone();
+        r.loss_model.sendside_loss = lp as f32 / c2s.experiment.totalpackets as f32;
+        *to_server = Rc::new(r);
+    }
+    let mut final_result = crate::experiment::results::ResultsForStoring {
         to_server: results_,
-        from_server: rcv.map(|rcv|Rc::new(rcv.analyse())),
+        from_server,
         conditions: c2s.experiment,
     };
 
-    let out : Box<dyn(::std::io::Write)>;
-    if let Some(pb) = cmd.output {
-        let mut f = ::std::fs::File::create(pb)?;
-        out = Box::new(f);
+    if cmd.visualise {
+        final_result.print_to_stdout();
     } else {
-        out = Box::new(::std::io::stdout());
+        let out : Box<dyn(::std::io::Write)>;
+        if let Some(pb) = cmd.output {
+            let mut f = ::std::fs::File::create(pb)?;
+            out = Box::new(f);
+        } else {
+            out = Box::new(::std::io::stdout());
+        }
+        let mut out = ::std::io::BufWriter::new(out);
+        ::serde_json::ser::to_writer(&mut out, &final_result)?;
+        use ::std::io::Write;
+        writeln!(out);
     }
-    let mut out = ::std::io::BufWriter::new(out);
-    ::serde_json::ser::to_writer(&mut out, &final_result)?;
-    use ::std::io::Write;
-    writeln!(out);
 
     Ok(())
 }

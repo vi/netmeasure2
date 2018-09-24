@@ -1,5 +1,5 @@
 use super::receiver::Info;
-use super::results::{ExperimentResults,DelayModel,LossModel};
+use super::results::{ExperimentResults,DelayModel,LossModel,ResultsForStoring};
 use crate::Result;
 use super::results::{CLUSTERS,DELAY_DELTAS,DELAY_VALUES};
 
@@ -192,4 +192,37 @@ impl ExperimentResults {
         }
         print_side_by_side(&delay_report, &deltas_report);
     }
+}
+
+impl ResultsForStoring {
+    pub fn print_to_stdout(&self) {
+        println!("Experiment params: {:?}", self.conditions);
+        fn q(r:&ExperimentResults) {
+            println!(
+                "Total received packets: {} (loss {:3.2}%, send-side loss: {:3.2}%)", 
+                r.total_received_packets, 
+                r.loss_model.loss_prob * 100.0,
+                r.loss_model.sendside_loss * 100.0,
+            );
+            r.visualise_loss();
+            println!();
+            r.visualise_delay();
+            println!();
+        }
+        if let Some(ref to_server) = self.to_server {
+            println!("** To server: ***");
+            q(to_server);
+        };
+        if let Some(ref from_server) = self.from_server {
+            println!("** From server: ***");
+            q(from_server);
+        };
+    }
+}
+
+pub fn read_and_visualize(p: &::std::path::Path) -> Result<()>  {
+    let mut f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
+    let r : ResultsForStoring = ::serde_json::from_reader(f)?;
+    r.print_to_stdout();
+    Ok(())
 }

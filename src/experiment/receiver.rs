@@ -53,28 +53,9 @@ impl PacketReceiver {
     }
 
     pub fn analyse(&self) -> ExperimentResults {
-        //println!("{:#?}",self.v);
-
-        let delta_popularity = [0.0;31];
-        let value_popularity = [0.0;30];
-        let loss = [0.0;30];
-        let nonloss = [0.0;30];
-
-        let delay_model = DelayModel {
-            delta_popularity,
-            value_popularity,
-        };
-        let loss_model = LossModel {
-            loss,
-            nonloss,
-            loss_prob : 0.0,
-        };
-        ExperimentResults {
-            session_id: self.session_id,
-            loss_model,
-            delay_model,
-            total_received_packets: self.ctr as u32,
-        }
+        let mut r = super::analyser::analyse(&self.v[0..self.ctr], self.v.len());
+        r.session_id = self.session_id;
+        r
     }
 
     pub fn save_raw_data(&self, dir: &::std::path::Path) {

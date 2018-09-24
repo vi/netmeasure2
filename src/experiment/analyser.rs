@@ -13,8 +13,10 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
         tmp.push((*seqn, delay));
         if mindelay_ms > delay { mindelay_ms = delay }
     }
-    for (_seqn,ref mut d) in tmp.iter_mut() {
-        *d -= mindelay_ms;
+    if (mindelay_ms < 0) {
+        for (_seqn,ref mut d) in tmp.iter_mut() {
+            *d -= mindelay_ms;
+        }
     }
     tmp.sort();
     tmp.dedup_by_key(|(seqn,_d)|*seqn);

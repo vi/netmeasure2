@@ -47,7 +47,7 @@ extern crate bincode;
 
 extern crate itertools;
 
-const API_VERSION: u32 = 1;
+const API_VERSION: u32 = 2;
 
 
 use self::enum_unitary::EnumUnitary;
@@ -114,7 +114,14 @@ enum Cmd {
     AnalyseRaw {
         #[structopt(parse(from_os_str))]
         file: ::std::path::PathBuf,
-    }
+    },
+
+    /// Visualise previous saved data
+    #[structopt(name = "show")]
+    Show {
+        #[structopt(parse(from_os_str))]
+        file: ::std::path::PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -127,6 +134,7 @@ fn main() -> Result<()> {
         Cmd::RDump => experiment::results::dump_some_results()?,
         Cmd::DumpSavedRawStats{file} => experiment::receiver::PacketReceiver::dump_raw_data(&file)?,
         Cmd::AnalyseRaw{file} => experiment::analyser::read_and_analyse(&file)?,
+        Cmd::Show{file} => experiment::visualiser::read_and_visualize(&file)?,
     };
     Ok(())
 }

@@ -16,7 +16,7 @@ pub const DELAY_VALUES: [i32; _] = [
     2000, 2500, 3000, 4000, 5000, 7000, 10000, 65535,
 ]);
 
-#[derive(Debug,Default,Serialize,Deserialize)]
+#[derive(Debug,Default,Serialize,Deserialize,Clone)]
 pub struct DelayModel {
     pub value_popularity: [f32; DELAY_VALUES.len()],
     pub delta_popularity: [f32; DELAY_DELTAS.len()],
@@ -29,14 +29,15 @@ pub const CLUSTERS: [i32; _] = [
     150, 200, 300, 400, 65535,
 ]);
 
-#[derive(Debug,Default,Serialize,Deserialize)]
+#[derive(Debug,Default,Serialize,Deserialize,Clone)]
 pub struct LossModel {
     pub nonloss: [f32; CLUSTERS.len()],
     pub loss: [f32; CLUSTERS.len()],
     pub loss_prob: f32,
+    pub sendside_loss: f32,
 }
 
-#[derive(Debug,Default,Serialize,Deserialize)]
+#[derive(Debug,Default,Serialize,Deserialize,Clone)]
 pub struct ExperimentResults {
     pub delay_model: DelayModel,
     pub loss_model: LossModel,
@@ -62,7 +63,10 @@ pub fn dump_some_results() -> Result<()>  {
     for v in r.delay_model.delta_popularity.iter_mut() { *v = rnd.gen(); }
     for v in r.loss_model.nonloss          .iter_mut() { *v = rnd.gen(); }
     for v in r.loss_model.loss             .iter_mut() { *v = rnd.gen(); }
-    let rpl = super::statement::ExperimentReply::HereAreResults{stats:Some(Rc::new(r))};
+    let rpl = super::statement::ExperimentReply::HereAreResults{
+        stats:Some(Rc::new(r)),
+        send_lost: None,
+    };
     let s2c = crate::ServerToClient::from(rpl);
     ::serde_cbor::ser::to_writer_sd(&mut ::std::io::stdout().lock(), &s2c)?;
     Ok(())

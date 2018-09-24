@@ -41,7 +41,11 @@ pub struct Cmd {
     save_raw_stats: Option<::std::path::PathBuf>,
 }
 
-struct CompletedExperiment(ExperimentInfo, Option<Rc<ExperimentResults>>);
+struct CompletedExperiment{
+    info: ExperimentInfo,
+    rcv: Option<Rc<ExperimentResults>>,
+    snd: Option<u32>,
+}
 
 struct OngoingExperiment {
     start_time : Instant,
@@ -49,12 +53,15 @@ struct OngoingExperiment {
     info: ExperimentInfo,
     cla : SocketAddr,
     rcv: Option<PacketReceiver>,
-    snd: Option<::std::thread::JoinHandle<crate::Result<()>>>,
+    snd: Option<::std::thread::JoinHandle<crate::Result<u32>>>,
 }
 
 impl OngoingExperiment {
     fn expired(&self) -> bool {
         Instant::now() > self.stop_time
+    }
+    fn expired2(&self) -> bool {
+        Instant::now() > self.stop_time + Duration::from_secs(2)
     }
 }
 
@@ -75,20 +82,31 @@ impl State {
             State::ExperimentIsOngoing(oe) => {
                 println!("Experiment completed");
 
-                let ce;
+                let mut ce;
                 if let Some(ref mut rcv) = oe.rcv {
                     if let Some(srs) = cmd.save_raw_stats.as_ref() {
                         rcv.save_raw_data(srs);
                     }
-                    ce = CompletedExperiment(oe.info.clone(), Some(Rc::new(rcv.analyse())));
+                    ce = CompletedExperiment{
+                        info: oe.info.clone(),
+                        rcv: Some(Rc::new(rcv.analyse())),
+                        snd: None,
+                    };
                 } else {
-                    ce = CompletedExperiment(oe.info.clone(), None);
+                    ce = CompletedExperiment{
+                        info: oe.info.clone(),
+                        rcv: None,
+                        snd: None,
+                    };
                 }
 
                 if let Some(snd) = oe.snd.take() {
                     match snd.join() {
                         Err(e) => { bail!("sender thread panicked"); },
-                        Ok(x) => x?,
+                        Ok(x) => {
+                            let lost = x?;
+                            ce.snd = Some(lost);
+                        },
                     }
                 };
 
@@ -126,11 +144,7 @@ impl State {
                     };
                     let udp2 = udp.try_clone()?;
                     Some(::std::thread::spawn(move || {
-                        if let Err(e) = sender.run(udp2, cla) {
-                            eprintln!("Sender thread failed: {}", e);
-                            return Err(e);
-                        }
-                        Ok(())
+                        sender.run(udp2, cla)
                     }))
                 } else { None };
 
@@ -211,8 +225,11 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                     let rq : ExperimentInfo = s2c.experiment;
 
                     let rp;
-                    if laste.is_some() && laste.as_ref().unwrap().0 == rq {
-                        rp = ExperimentReply::HereAreResults{stats: laste.as_ref().unwrap().1.clone()};
+                    if laste.is_some() && laste.as_ref().unwrap().info == rq {
+                        rp = ExperimentReply::HereAreResults{
+                            stats: laste.as_ref().unwrap().rcv.clone(),
+                            send_lost: laste.as_ref().unwrap().snd,
+                        };
                     } else
                     if let Err(e) = rq.check_limits(&cmd) {
                         rp = ExperimentReply::ResourceLimits{msg:e.to_string()};
@@ -251,11 +268,20 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                         let rq : ExperimentInfo = from_slice(msg)?;
                         let rp;
                         if rq == oe.info {
-                            let elapsed_time_us = (Instant::now() - oe.start_time).as_us();
-                            rp = ExperimentReply::IsOngoing {
-                                session_id: oe.info.session_id.unwrap(),
-                                elapsed_time_us,
-                            };
+                            let n = Instant::now();
+                            if n >= oe.start_time {
+                                let elapsed_time_us = (n - oe.start_time).as_us();
+                                rp = ExperimentReply::IsOngoing {
+                                    session_id: oe.info.session_id.unwrap(),
+                                    elapsed_time_us,
+                                };
+                            } else {
+                                let remaining_warmup_time_us = (oe.start_time - n).as_us();
+                                rp = ExperimentReply::Accepted {
+                                    session_id: oe.info.session_id.unwrap(),
+                                    remaining_warmup_time_us,
+                                };
+                            }
                         } else {
                             eprintln!("{:?}", rq);
                             eprintln!("!=");
@@ -265,7 +291,7 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                         }
                         udp.reply(rp, cla)?;
 
-                        if oe.expired() {
+                        if oe.expired2() {
                             st.complete_experiment(&mut udp, &cmd)?;
                         }
                         continue;
