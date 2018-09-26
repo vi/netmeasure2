@@ -4,14 +4,12 @@ use ::std::net::{SocketAddr,UdpSocket,SocketAddrV4,SocketAddrV6,Ipv4Addr,Ipv6Add
 use ::std::time::{Duration,Instant};
 use crate::experiment::SmallishDuration;
 use crate::experiment::statement::{ExperimentInfo,ExperimentReply,ExperimentDirection};
-use crate::experiment::results::ExperimentResults;
+use crate::experiment::results::{ExperimentResults,ResultsForStoring};
 use ::std::rc::Rc;
 
-#[derive(Debug, StructOpt)]
-pub struct Cmd {
-    #[structopt(flatten)]
-    pub experiment: ExperimentInfo,
 
+#[derive(Debug, StructOpt, Clone)]
+pub struct CommunicOpts {
     /// Remote UDP port to use as netmeasure2 server
     pub server: SocketAddr,
 
@@ -22,11 +20,26 @@ pub struct Cmd {
     #[structopt(long="source-port", default_value="0")]
     pub source_port: u16,
 
-    #[structopt(long="output", short="o", parse(from_os_str))]
-    pub output: Option<::std::path::PathBuf>,
-
     #[structopt(long="save-raw-stats",short="R",parse(from_os_str))]
     save_raw_stats: Option<::std::path::PathBuf>,
+}
+
+#[derive(Debug, StructOpt, Clone)]
+pub struct CmdImpl {
+    #[structopt(flatten)]
+    pub experiment: ExperimentInfo,
+
+    #[structopt(flatten)]
+    pub co : CommunicOpts,
+}
+
+#[derive(Debug, StructOpt)]
+pub struct Cmd {
+    #[structopt(flatten)]
+    pub inner: CmdImpl,
+
+    #[structopt(long="output", short="o", parse(from_os_str))]
+    pub output: Option<::std::path::PathBuf>,
 
     /// Format results nicely to stdout
     /// (maybe in addition to outputing JSON to `-o` file)
@@ -34,11 +47,11 @@ pub struct Cmd {
     visualise: bool,
 }
 
-pub fn probe(cmd:Cmd) -> Result<()> {
-    let udp = UdpSocket::bind(if cmd.ipv6 {
-        SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, cmd.source_port, 0, 0))
+pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
+    let udp = UdpSocket::bind(if cmd.co.ipv6 {
+        SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, cmd.co.source_port, 0, 0))
     } else {
-        SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, cmd.source_port))
+        SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, cmd.co.source_port))
     })?;
     udp.set_read_timeout(Some(Duration::from_millis(250)))?;
 
@@ -73,10 +86,10 @@ pub fn probe(cmd:Cmd) -> Result<()> {
         //eprintln!("{:?}", c2s);
         c2s.seqn_for_rtt+=1;
         ts_for_rtt_send.insert(c2s.seqn_for_rtt, Instant::now());
-        udp.send_to(::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice(), cmd.server)?;
+        udp.send_to(::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice(), cmd.co.server)?;
         match udp.recv_from(&mut buf) {
             Ok((ret,from)) => {
-                if (from != cmd.server) {
+                if (from != cmd.co.server) {
                     eprintln!("Foreign packet");
                     continue;
                 }
@@ -137,7 +150,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
 
     let snd = if c2s.experiment.direction.client_needs_sender() {
         let udp2 = udp.try_clone()?;
-        let serv2 = cmd.server;
+        let serv2 = cmd.co.server;
         let sender = crate::experiment::sender::Sender {
             delay_between_packets: Duration::from_micros(c2s.experiment.packetdelay_us),
             packetcount: c2s.experiment.totalpackets,
@@ -164,7 +177,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
             eprintln!("Experiment finished");
             request_results = true;
 
-            if let Some(ref srs) = cmd.save_raw_stats {
+            if let Some(ref srs) = cmd.co.save_raw_stats {
                 if let Some(ref mut rcv) = rcv {
                     rcv.save_raw_data(srs);
                 }
@@ -179,7 +192,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
             Ok((ret,from)) => {
                 let msg = &buf[0..ret];
 
-                if from != cmd.server {
+                if from != cmd.co.server {
                     eprintln!("foreign packet");
                     continue;
                 }
@@ -249,7 +262,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
                 if request_results {
                     c2s.seqn_for_rtt+=1;
                     ts_for_rtt_send.insert(c2s.seqn_for_rtt, Instant::now());
-                    udp.send_to(::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice(), cmd.server)?;
+                    udp.send_to(::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice(), cmd.co.server)?;
                 }
             },
             Err(e) => Err(e)?,
@@ -291,12 +304,18 @@ pub fn probe(cmd:Cmd) -> Result<()> {
         }
         rtt_us = dur.as_us() / count;
     }
-    let mut final_result = crate::experiment::results::ResultsForStoring {
+    let mut final_result = ResultsForStoring {
         to_server: results_,
         from_server,
         conditions: c2s.experiment,
         rtt_us,
     };
+    Ok(final_result)
+}
+
+
+pub fn probe(cmd:Cmd) -> Result<()> {
+    let final_result = probe_impl(cmd.inner)?;
 
     if cmd.visualise && cmd.output.is_none() {
         final_result.print_to_stdout();

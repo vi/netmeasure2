@@ -56,10 +56,11 @@ use self::structopt::StructOpt;
 
 use std::net::SocketAddr;
 
-mod experiment;
-mod numplay;
-mod serve;
-mod probe;
+pub mod experiment;
+pub mod numplay;
+pub mod serve;
+pub mod probe;
+pub mod battery;
 
 
 pub type Result<T> = ::std::result::Result<T, ::failure::Error>;
@@ -137,6 +138,19 @@ enum Cmd {
         #[structopt(parse(from_os_str))]
         file: ::std::path::PathBuf,
     },
+
+    BatteryInfo,
+
+    /// Run entire test battery
+    #[structopt(name = "battery")]
+    Battery(battery::Cmd),
+
+      /// Visualise previous saved data
+    #[structopt(name = "showbat")]
+    BatteryShow {
+        #[structopt(parse(from_os_str))]
+        file: ::std::path::PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -150,6 +164,9 @@ fn main() -> Result<()> {
         Cmd::DumpSavedRawStats{file} => experiment::receiver::PacketReceiver::dump_raw_data(&file)?,
         Cmd::AnalyseRaw{file} => experiment::analyser::read_and_analyse(&file)?,
         Cmd::Show{file} => experiment::visualiser::read_and_visualize(&file)?,
+        Cmd::BatteryInfo => battery::Battery::generate().show(),
+        Cmd::Battery(x) => battery::Battery::generate().run(x)?,
+        Cmd::BatteryShow{file} => battery::print_summary(&file)?,
     };
     Ok(())
 }

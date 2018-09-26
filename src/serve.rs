@@ -349,13 +349,11 @@ impl ExperimentNegotiation for UdpSocket {
 
 impl ExperimentInfo {
     pub fn check_limits(&self, cmd: &Cmd) -> ::std::result::Result<(),&'static str> {
-        let effective_ps = (self.packetsize+32).max(64);
         if self.packetdelay_us == 0 { return Err("zero packet delay") }
         if self.packetdelay_us < cmd.min_packetdelay_us {
             return Err("packetdelay too low");
         }
-        let pps = 1000_000.0 / (self.packetdelay_us as f64);
-        let bw_kbps = ((effective_ps as f64) * pps * 8.0 / 1024.0) as u32;
+        let bw_kbps = self.kbps();
         let maxdur = Duration::from_secs(cmd.timelimit.into());
 
         if self.totalpackets > 1_000_0000 { return Err("total packets too big") }
@@ -374,5 +372,15 @@ impl ExperimentInfo {
 
     pub fn duration(&self) -> Duration {
         Duration::from_micros(self.packetdelay_us) * self.totalpackets
+    }
+
+    pub fn kbps(&self) -> u32 {
+        let effective_ps = (self.packetsize+32).max(64);
+        let pps = 1000_000.0 / (self.packetdelay_us as f64);
+        ((effective_ps as f64) * pps * 8.0 / 1000.0) as u32
+    }
+
+    pub fn bytes_used(&self) -> u32 {
+        self.totalpackets * (self.packetsize+24)
     }
 }

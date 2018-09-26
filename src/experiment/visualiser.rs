@@ -221,8 +221,8 @@ impl ResultsForStoring {
         use crate::experiment::SmallishDuration;
         println!(
             "Data usage: {:.3} MiB, bitrate: {:.3} mbit/s",
-            (self.conditions.totalpackets * (self.conditions.packetsize+24)) as f32 * 0.001 * 0.001,
-            (self.conditions.packetsize+24) as f32 / self.conditions.packetdelay_us as f32 * 8.0,
+            self.conditions.bytes_used() as f32 * 0.001 * 0.001,
+            self.conditions.kbps() as f32 / 1000.0 ,
         );
     }
 }
