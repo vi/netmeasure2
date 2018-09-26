@@ -28,20 +28,16 @@ impl Sender {
 
         eprintln!("Sender started");
 
-        let mut hyst = false;
-
         for seqn in 0..self.packetcount {
             let n = now();
             let mut t = self.experiment_start + self.delay_between_packets * seqn;
-            if n < t {
+            if n <= t {
                 sleeper.sleep(t - n);
                 //::std::thread::sleep(t-n);
                 //::spin_sleep::sleep(t-n);
-                hyst = false;
             } else {
-                if hyst || (n - t).as_us() > 1000_20 {
+                if (n - t).as_us() > 10_000 {
                     lost += 1;
-                    hyst = true;
                     continue;
                 }
             }
