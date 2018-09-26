@@ -1,6 +1,7 @@
 use ::std::time::{Instant,Duration};
 
 use super::results::{ExperimentResults,DelayModel,LossModel};
+use super::statement::MINPACKETSIZE;
 
 use ::byteorder::{BE,ByteOrder};
 
@@ -28,10 +29,10 @@ pub struct PacketReceiverParams {
 
 impl PacketReceiver {
     pub fn recv(&mut self, pkt: &[u8]) {
-        assert!(pkt.len() >= 16);
+        assert!(pkt.len() >= MINPACKETSIZE);
         if self.ctr >= self.v.len() { return }
-        let seqn = BE::read_u32(&pkt[8..12]);
-        let st_us = BE::read_u32(&pkt[12..16]);
+        let seqn = BE::read_u32(&pkt[12..16]);
+        let st_us = BE::read_u32(&pkt[16..20]);
 
 
         let recv_ts = Instant::now();

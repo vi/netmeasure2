@@ -132,7 +132,7 @@ impl ExperimentResults {
     pub fn visualise_delay(&self) {
         let mut delay_report = vec![];
 
-        delay_report.push(format!("Delay (mean={}ms):", self.delay_model.mean_delay_us/1000.0));
+        delay_report.push(format!("Delay (mean={:.0}ms):", self.delay_model.mean_delay_us/1000.0));
         let mut prevskipped = false;
         for (i,&c) in DELAY_VALUES.iter().enumerate() {
             let v = self.delay_model.value_popularity[i];
@@ -218,6 +218,12 @@ impl ResultsForStoring {
             println!("** From server: ***");
             q(from_server);
         };
+        use crate::experiment::SmallishDuration;
+        println!(
+            "Data usage: {:.3} MiB, bitrate: {:.3} mbit/s",
+            (self.conditions.totalpackets * (self.conditions.packetsize+24)) as f32 * 0.001 * 0.001,
+            (self.conditions.packetsize+24) as f32 / self.conditions.packetdelay_us as f32 * 8.0,
+        );
     }
 }
 

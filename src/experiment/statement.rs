@@ -8,6 +8,8 @@ use ::std::time::Duration;
 
 use ::structopt::clap::Arg;
 
+pub const MINPACKETSIZE : usize = 20;
+
 #[derive(Debug, EnumString, Display, Serialize, Deserialize, Eq, PartialEq, Copy, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum ExperimentDirection {
@@ -57,9 +59,9 @@ pub struct ExperimentInfo {
     #[structopt(long = "rtpmimic")]
     pub rtpmimic: bool,
 
-    /// Internal parameter, no need to set
-    #[structopt(long = "sessionid")]
-    pub session_id: Option<u64>,
+    /// Internal parameter, no need to be set
+    #[structopt(long = "sessionid", default_value = "0")]
+    pub session_id: u64,
 
     /// In microseconds
     #[structopt(long = "warmup_time", default_value = "2000000")]

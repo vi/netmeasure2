@@ -9,7 +9,7 @@ use ::std::net::UdpSocket;
 
 use ::serde_cbor::{ser::to_vec_sd,de::from_slice};
 
-use crate::experiment::statement::{ExperimentInfo,ExperimentReply};
+use crate::experiment::statement::{ExperimentInfo,ExperimentReply,MINPACKETSIZE};
 use crate::experiment::results::ExperimentResults;
 use crate::experiment::receiver::{PacketReceiver,PacketReceiverParams};
 
@@ -141,6 +141,7 @@ impl State {
                         rtpmimic: rq.rtpmimic,
                         packetcount: rq.totalpackets,
                         experiment_start,
+                        session_id: rq.session_id,
                     };
                     let udp2 = udp.try_clone()?;
                     Some(::std::thread::spawn(move || {
@@ -151,7 +152,7 @@ impl State {
                 let rcv = if rq.direction.server_needs_receiver() {
                     let prp = PacketReceiverParams {
                         experiment_start,
-                        session_id: rq.session_id.unwrap(),
+                        session_id: rq.session_id,
                         num_packets: rq.totalpackets,
                     };
                     Some(PacketReceiver::new(prp))
@@ -211,7 +212,7 @@ pub fn serve(cmd:Cmd) -> Result<()> {
             let msg = &buf[0..ret];
             match &mut st {
                 State::Idle(ref laste,ref mut pending) => {
-                    if msg.len() < 16 {
+                    if msg.len() < MINPACKETSIZE {
                         continue;
                     }
                     if &msg[0..3] != b"\xd9\xd9\xf7" {
@@ -234,7 +235,7 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                     } else
                     if let Err(e) = rq.check_limits(&cmd) {
                         rp = ExperimentReply::ResourceLimits{msg:e.to_string()};
-                    } else if rq.session_id.is_some() && pending == &Some(PendingExperiment{cla,sid:rq.session_id.unwrap()}) {
+                    } else if pending == &Some(PendingExperiment{cla,sid:rq.session_id}) {
                         let oe = st.start_experiment(cla,&mut udp,rq)?;
                         let mut remaining_warmup_time_us = 0;
                         let now = Instant::now();
@@ -242,7 +243,7 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                             remaining_warmup_time_us = (oe.start_time-now).as_us();
                         }
                         rp = ExperimentReply::Accepted{
-                            session_id: oe.info.session_id.unwrap(),
+                            session_id: oe.info.session_id,
                             remaining_warmup_time_us,
                         };
                     } else {
@@ -260,7 +261,7 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                         continue;
                     }
                     
-                    if msg.len() < 16 {
+                    if msg.len() < MINPACKETSIZE {
                         // dwarf packet
                         continue;
                     }
@@ -279,13 +280,13 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                             if n >= oe.start_time {
                                 let elapsed_time_us = (n - oe.start_time).as_us();
                                 rp = ExperimentReply::IsOngoing {
-                                    session_id: oe.info.session_id.unwrap(),
+                                    session_id: oe.info.session_id,
                                     elapsed_time_us,
                                 };
                             } else {
                                 let remaining_warmup_time_us = (oe.start_time - n).as_us();
                                 rp = ExperimentReply::Accepted {
-                                    session_id: oe.info.session_id.unwrap(),
+                                    session_id: oe.info.session_id,
                                     remaining_warmup_time_us,
                                 };
                             }
@@ -311,8 +312,12 @@ pub fn serve(cmd:Cmd) -> Result<()> {
                         continue;
                     }
 
-                    if &msg[0..3] == b"" {
-                        // TODO: RTP mode
+                    if &msg[0..2] == b"\x80\x64" {
+                        // RTP mode
+                        if let Some(ref mut rcv) = oe.rcv {
+                            rcv.recv(msg);
+                        }
+                        continue;
                     }
 
                     println!("Unknown packet beginning with {:?}", &msg[0..3]);
@@ -356,7 +361,7 @@ impl ExperimentInfo {
         if self.totalpackets > 1_000_0000 { return Err("total packets too big") }
         if self.packetdelay_us > 60_000_000 { return Err("packet delay too big") }
 
-        if self.packetsize < 16 || self.packetsize > 10000 {
+        if self.packetsize < MINPACKETSIZE as u32 || self.packetsize > 10000 {
             return Err("invalid packetsize");
         }
 

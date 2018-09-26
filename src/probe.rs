@@ -28,16 +28,13 @@ pub struct Cmd {
     #[structopt(long="save-raw-stats",short="R",parse(from_os_str))]
     save_raw_stats: Option<::std::path::PathBuf>,
 
-    /// Format results nicely to stdout instead of JSON
+    /// Format results nicely to stdout
+    /// (maybe in addition to outputing JSON to `-o` file)
     #[structopt(short="S")]
     visualise: bool,
 }
 
 pub fn probe(cmd:Cmd) -> Result<()> {
-    if cmd.visualise && cmd.output.is_some() {
-        bail!("-o and -S are currently incompatible");
-    }
-
     let udp = UdpSocket::bind(if cmd.ipv6 {
         SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, cmd.source_port, 0, 0))
     } else {
@@ -94,13 +91,13 @@ pub fn probe(cmd:Cmd) -> Result<()> {
                 match s2c.reply {
                     ExperimentReply::Busy => bail!("Server busy"),
                     ExperimentReply::Accepted{session_id,remaining_warmup_time_us} => {
-                        assert!(Some(session_id) == c2s.experiment.session_id);
+                        assert!(session_id == c2s.experiment.session_id);
                         experiment_start_for_receiver =
                             Instant::now() + Duration::from_micros(remaining_warmup_time_us as u64);
                         break;
                     },
                     ExperimentReply::IsOngoing{session_id,elapsed_time_us} => {
-                        assert!(Some(session_id) == c2s.experiment.session_id);
+                        assert!(session_id == c2s.experiment.session_id);
                         experiment_start_for_receiver =
                             Instant::now() - Duration::from_micros(elapsed_time_us as u64);
                         break;
@@ -111,7 +108,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
                     },
                     ExperimentReply::HereAreResults{..} => bail!("Results not expected now"),
                     ExperimentReply::RetryWithASessionId{session_id} => {
-                        c2s.experiment.session_id = Some(session_id);
+                        c2s.experiment.session_id = session_id;
                     },
                     ExperimentReply::Failed{msg} => {
                         eprintln!("{}",msg);
@@ -132,7 +129,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
         Some(crate::experiment::receiver::PacketReceiver::new(
             crate::experiment::receiver::PacketReceiverParams {
                 num_packets: c2s.experiment.totalpackets,
-                session_id: c2s.experiment.session_id.unwrap(),
+                session_id: c2s.experiment.session_id,
                 experiment_start: experiment_start_for_receiver,
             }
         ))
@@ -147,6 +144,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
             packetsize: c2s.experiment.packetsize as usize,
             rtpmimic: c2s.experiment.rtpmimic,
             experiment_start: start,
+            session_id: c2s.experiment.session_id,
         };
         Some(::std::thread::spawn(move || {
             sender.run(udp2, serv2)
@@ -186,6 +184,10 @@ pub fn probe(cmd:Cmd) -> Result<()> {
                     continue;
                 }
 
+                if ret < crate::experiment::statement::MINPACKETSIZE {
+                    continue;
+                }
+
                 if &msg[0..3] == b"\x00\x00\x00" {
                     if let Some(ref mut rcv) = rcv {
                         rcv.recv(msg);
@@ -193,7 +195,14 @@ pub fn probe(cmd:Cmd) -> Result<()> {
                     continue;
                 }
 
-                // TODO: RTP mode
+                if &msg[0..2] == b"\x80\x64" {
+                    // RTP mode
+                    if let Some(ref mut rcv) = rcv {
+                        rcv.recv(msg);
+                    }
+                    continue;
+                }
+
 
                 if &msg[0..3] != b"\xd9\xd9\xf7" {
                     eprintln!("Unexpected packet");
@@ -221,7 +230,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
                     },
                     ExperimentReply::HereAreResults{stats,send_lost} => {
                         if let Some(ref x) = stats {
-                            ensure!(Some(x.session_id) == c2s.experiment.session_id,
+                            ensure!(x.session_id == c2s.experiment.session_id,
                                 "wrong session id in results"
                             );
                         }
@@ -289,13 +298,16 @@ pub fn probe(cmd:Cmd) -> Result<()> {
         rtt_us,
     };
 
-    if cmd.visualise {
+    if cmd.visualise && cmd.output.is_none() {
         final_result.print_to_stdout();
     } else {
         let out : Box<dyn(::std::io::Write)>;
         if let Some(pb) = cmd.output {
             let mut f = ::std::fs::File::create(pb)?;
             out = Box::new(f);
+            if cmd.visualise {
+                final_result.print_to_stdout();
+            }
         } else {
             out = Box::new(::std::io::stdout());
         }
