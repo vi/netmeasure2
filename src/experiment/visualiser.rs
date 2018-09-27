@@ -132,7 +132,7 @@ impl ExperimentResults {
     pub fn visualise_delay(&self) {
         let mut delay_report = vec![];
 
-        delay_report.push(format!("Delay (mean={:.0}ms):", self.delay_model.mean_delay_us/1000.0));
+        delay_report.push(format!("Delay (mean={:.0}ms):", self.delay_model.mean_delay_ms));
         let mut prevskipped = false;
         for (i,&c) in DELAY_VALUES.iter().enumerate() {
             let v = self.delay_model.value_popularity[i];

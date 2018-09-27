@@ -20,7 +20,7 @@ pub const DELAY_VALUES: [i32; _] = [
 pub struct DelayModel {
     pub value_popularity: [f32; DELAY_VALUES.len()],
     pub delta_popularity: [f32; DELAY_DELTAS.len()],
-    pub mean_delay_us: f32,
+    pub mean_delay_ms: f32,
 }
 
 /// Hard-coded loss (or non-loss) cluster ranges. Must be sorted.

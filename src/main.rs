@@ -47,7 +47,7 @@ extern crate bincode;
 
 extern crate itertools;
 
-const API_VERSION: u32 = 4;
+const API_VERSION: u32 = 5;
 
 
 use self::enum_unitary::EnumUnitary;
@@ -140,6 +140,7 @@ enum Cmd {
     },
 
     BatteryInfo,
+    BatteryBBInfo,
 
     /// Run entire test battery
     #[structopt(name = "battery")]
@@ -165,7 +166,8 @@ fn main() -> Result<()> {
         Cmd::AnalyseRaw{file} => experiment::analyser::read_and_analyse(&file)?,
         Cmd::Show{file} => experiment::visualiser::read_and_visualize(&file)?,
         Cmd::BatteryInfo => battery::Battery::generate().show(),
-        Cmd::Battery(x) => battery::Battery::generate().run(x)?,
+        Cmd::BatteryBBInfo => battery::Battery::generate_bb().show(),
+        Cmd::Battery(x) => battery::run(x)?,
         Cmd::BatteryShow{file} => battery::print_summary(&file)?,
     };
     Ok(())

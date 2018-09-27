@@ -117,7 +117,7 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
     normalize(&mut r.delay_model.delta_popularity);
     r.total_received_packets=tmp.len() as u32;
     r.loss_model.loss_prob = 1.0 - tmp.len() as f32 / total as f32;
-    r.delay_model.mean_delay_us = delaysum / tmp.len() as f32;
+    r.delay_model.mean_delay_ms = delaysum / tmp.len() as f32;
     r
 }
 

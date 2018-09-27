@@ -1,6 +1,6 @@
 use ::structopt::StructOpt;
 use crate::probe::{CmdImpl,CommunicOpts};
-use crate::experiment::results::ResultsForStoring;
+use crate::experiment::results::{ResultsForStoring,ExperimentResults};
 use crate::experiment::statement::{ExperimentDirection,ExperimentInfo,ExperimentReply};
 use ::rand::{XorShiftRng,RngCore,SeedableRng,Rng};
 use crate::Result;
@@ -20,6 +20,10 @@ pub struct Cmd {
     /// (maybe in addition to outputing JSON to `-o` file)
     #[structopt(short="S")]
     visualise: bool,
+
+    /// Do a big, half-a-gigabyte test for more broadband networks
+    #[structopt(long="big")]
+    big: bool,
 }
 
 fn getrand() -> XorShiftRng {
@@ -123,6 +127,90 @@ impl Battery {
 
         Battery(v)
     }
+
+
+    pub fn generate_bb() -> Self {
+        let mut v = vec![];
+
+        let mut r = getrand();
+
+        let mut lightweight = 0;
+        let mut mid1weight = 0;
+        let mut mid2weight = 0;
+        let mut heavyweight = 0;
+
+        while v.len() < 50 {
+            let mut packetsize = if r.gen_bool(0.5) {
+                r.gen_range(256,1537)
+            } else {
+                r.gen_range(80,256)
+            };
+            let direction = r.gen();
+            let packetdelay_us = if r.gen_bool(0.5) {
+                r.gen_range(40, 300)
+            } else {
+                r.gen_range(300, 30_000)
+            };
+            let rtpmimic = r.gen();
+            let mut totalpackets = (5_000_000 / packetdelay_us) as u32;
+            if totalpackets < 5000 &&  r.gen_bool(0.7) { 
+                totalpackets = 5000
+            };
+            if totalpackets < 1000 {
+                totalpackets = 1000
+            };
+            let e = ExperimentInfo {
+                direction,
+                packetdelay_us,
+                packetsize,
+                pending_start_in_microseconds: 2000_000,
+                rtpmimic,
+                session_id: 0,
+                totalpackets,
+            };
+            if e.kbps() > 80_000 {
+                continue;
+            }
+            if r.gen_bool(0.8) && e.duration().as_secs() > 10 {
+                continue;
+            }
+            if e.duration().as_secs() > 30 {
+                continue;
+            }
+
+            if e.kbps() < 200 {
+                if lightweight < 15 {
+                    lightweight += 1;
+                } else {
+                    continue;
+                }
+            } else if e.kbps() < 1400 {
+                if mid1weight < 15 {
+                    mid1weight += 1;
+                } else {
+                    continue;
+                }
+            } else if e.kbps() < 8000 {
+                if mid2weight < 15 {
+                    mid2weight += 1;
+                } else {
+                    continue;
+                }
+            } else {
+                if heavyweight < 10 {
+                    heavyweight += 1;
+                } else {
+                    continue;
+                }
+            }
+
+            v.push(e);
+        }
+        r.shuffle(&mut v[..]);
+
+        Battery(v)
+    }
+
     pub fn show(&self) {
         let mut b = 0u64;
         let mut t = 0u64;
@@ -136,15 +224,66 @@ impl Battery {
         }
         println!("Total {} MiB, {} minutes, {} experiments", b / 1024/1024, t / 60, self.0.len());
     }
+}
 
-    pub fn run(self, cmd:Cmd) -> Result<()> {
+pub fn print_summary(p: &::std::path::Path) -> Result<()> {
+    let mut f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
+    let v : Vec<ResultsForStoring> = ::serde_json::from_reader(f)?;
+
+    use ::std::collections::BTreeMap;
+    let mut m : BTreeMap<u32, usize> = BTreeMap::new();
+
+    for (i,entry) in v.iter().enumerate() {
+        let kbps = entry.conditions.kbps();
+        m.insert(kbps, i);
+    }
+
+    println!("  kbps  | pktsz || ekbps_^ | loss_^ | delay_^ || ekbps_v | loss_v | delay_v");
+    for (_, &i) in m.iter() {
+        let entry = &v[i];
+        let mut toserv = format!("");
+        let mut fromserv = format!("");
+        let q = |x : &ExperimentResults| {
+            let ekbps = entry.conditions.kbps() as f32 * (1.0 - x.loss_model.loss_prob);
+            format!(
+                "{:7.0} | {:6.1} | {:7.0}",
+                ekbps,
+                x.loss_model.loss_prob*100.0,
+                x.delay_model.mean_delay_ms,
+            )
+        };
+        if let Some(x) = entry.to_server.as_ref() {
+            toserv = q(x);
+        }
+        if let Some(x) = entry.from_server.as_ref() {
+            fromserv = q(x);
+        }
+        println!(
+            "{:7} | {:5} || {:26} || {:26}",
+            entry.conditions.kbps(),
+            entry.conditions.packetsize,
+            toserv,
+            fromserv,
+        );
+    }
+    Ok(())
+}
+
+    pub fn run(cmd:Cmd) -> Result<()> {
         let mut v = vec![];
 
-        let n = self.0.len();
+        let battery = if cmd.big {
+            Battery::generate_bb()
+        } else {
+            Battery::generate()
+        };
+
+        let n = battery.0.len();
         let co = cmd.co;
 
+
         eprintln!("0%");
-        for (i,experiment) in self.0.into_iter().enumerate() {
+        for (i,experiment) in battery.0.into_iter().enumerate() {
             use crate::probe::probe_impl;
 
             let mut retries = 0;
@@ -198,52 +337,3 @@ impl Battery {
 
         Ok(())
     }
-}
-
-pub fn print_summary(p: &::std::path::Path) -> Result<()> {
-    let mut f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
-    let v : Vec<ResultsForStoring> = ::serde_json::from_reader(f)?;
-
-    use ::std::collections::BTreeMap;
-    let mut m : BTreeMap<u32, usize> = BTreeMap::new();
-
-    for (i,entry) in v.iter().enumerate() {
-        let kbps = entry.conditions.kbps();
-        m.insert(kbps, i);
-    }
-
-    println!("  kbps  | pktsz ||  loss_^ | delay_^ || loss_v | delay_v");
-    for (_, &i) in m.iter() {
-        let entry = &v[i];
-        match entry.conditions.direction {
-            ExperimentDirection::Bidirectional => { println!(
-                "{:7} | {:5} || {:7.1} | {:7.0} || {:6.1} | {:7.0}",
-                entry.conditions.kbps(),
-                entry.conditions.packetsize,
-                entry.to_server.as_ref().unwrap().loss_model.loss_prob*100.0,
-                entry.to_server.as_ref().unwrap().delay_model.mean_delay_us / 1000.0,
-                entry.from_server.as_ref().unwrap().loss_model.loss_prob*100.0,
-                entry.from_server.as_ref().unwrap().delay_model.mean_delay_us / 1000.0,
-            );},
-            ExperimentDirection::ToServerOnly => { println!(
-                "{:7} | {:5} || {:7.1} | {:7.0} || {:6.1} | {:7.0}",
-                entry.conditions.kbps(),
-                entry.conditions.packetsize,
-                entry.to_server.as_ref().unwrap().loss_model.loss_prob*100.0,
-                entry.to_server.as_ref().unwrap().delay_model.mean_delay_us / 1000.0,
-                "",
-                "",
-            );},
-            ExperimentDirection::FromServerOnly => { println!(
-                "{:7} | {:5} || {:7.1} | {:7.0} || {:6.1} | {:7.0}",
-                entry.conditions.kbps(),
-                entry.conditions.packetsize,
-                "",
-                "",
-                entry.from_server.as_ref().unwrap().loss_model.loss_prob*100.0,
-                entry.from_server.as_ref().unwrap().delay_model.mean_delay_us / 1000.0,
-            );},
-        }
-    }
-    Ok(())
-}
