@@ -132,7 +132,7 @@ impl ExperimentResults {
                 s += delay_contrbution;
             }
         }
-        s
+        s / 100.0 * self.total_received_packets as f32
     }
 
     /// Reverse of latchiness
@@ -145,7 +145,7 @@ impl ExperimentResults {
                 s -= delay_contrbution;
             }
         }
-        s
+        s / 100.0 * self.total_received_packets as f32
     }
 }
 
