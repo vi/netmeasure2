@@ -226,7 +226,7 @@ impl Battery {
     }
 }
 
-pub fn print_summary(p: &::std::path::Path) -> Result<()> {
+pub fn print_summary(p: &::std::path::Path, verbose: bool) -> Result<()> {
     let mut f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
     let v : Vec<ResultsForStoring> = ::serde_json::from_reader(f)?;
 
@@ -238,18 +238,79 @@ pub fn print_summary(p: &::std::path::Path) -> Result<()> {
         m.insert(kbps, i);
     }
 
-    println!("  kbps  | pktsz || ekbps_^ | loss_^ | delay_^ || ekbps_v | loss_v | delay_v");
+    println!("  kbps  | pktsz || ekbps_^ | loss_^ | delay_^    || ekbps_v | loss_v | delay_v  ");
     for (_, &i) in m.iter() {
         let entry = &v[i];
         let mut toserv = format!("");
         let mut fromserv = format!("");
         let q = |x : &ExperimentResults| {
-            let ekbps = entry.conditions.kbps() as f32 * (1.0 - x.loss_model.loss_prob);
+            let lm = &x.loss_model;
+            let ekbps = entry.conditions.kbps() as f32 * (1.0 - lm.loss_prob);
+            let loss_sendside = if lm.sendside_loss * 2.0 <= lm.loss_prob {
+                " "
+            } else {
+                "*"
+            };
+            let loss_recoverability = if lm.loss_prob < 0.01 {
+                " "
+            } else if (lm.loss[0] +
+                       lm.loss[1] + 
+                       lm.loss[2] + 
+                       lm.loss[3] + 
+                       lm.loss[4] + 
+                       lm.loss[5] + 
+                       lm.loss[6] + 
+                       lm.loss[7] + 
+                       lm.loss[8] + 
+                       lm.loss[9] ) * lm.loss_prob >= 0.3 {
+                "!"
+            } else if lm.loss[0] >= 0.8 {
+                "R"
+            } else if lm.loss[0]+
+                      lm.loss[1]+
+                      lm.loss[2] >= 0.7 {
+                "r"
+            } else {
+                " "
+            };
+
+
+            let latchup_marker = match (
+                    (x.latchiness()*1000.0) as i32,
+                    (x.delay_abrupt_decreaseness()*1000.0) as i32,
+             ) {
+                (-1000 ... 200, -1000...200) => "  ",
+                (200 ... 2_000, -1000...200) => ". ",
+                (2_000...5_000, -1000...200) => "l ",
+                (5_000...10_000,-1000...200) => "L ",
+                (10_000 ... 100000000, -100...2000) => "LL",
+
+                (-1000 ... 200, 200...2000) => " ,",
+                (200 ... 2_000, 200...2000) => ".,",
+                (2_000...5_000, 200...2000) => "l,",
+                (5_000...10_000,200...2000) => "L,",
+
+                (-1000 ... 200, 2000...5000) => " r",
+                (200 ... 2_000, 2000...5000) => ".r",
+                (2_000...5_000, 2000...5000) => "lr",
+                (5_000...10_000,2000...5000) => "Lr",
+
+                (-1000 ... 200, 5000...10000) => " R",
+                (200 ... 2_000, 5000...10000000) => ".R",
+                (2_000...5_000, 5000...10000000) => "lR",
+                (5_000...10_00000000,5000...10000000) => "LR",
+                (-1000...2000,5000...10000000) => "RR",
+
+                _ => "??",
+            };
             format!(
-                "{:7.0} | {:6.1} | {:7.0}",
+                "{:7.0} | {:4.1}{}{} | {:7.0} {}",
                 ekbps,
-                x.loss_model.loss_prob*100.0,
+                lm.loss_prob*100.0,
+                loss_sendside,
+                loss_recoverability,
                 x.delay_model.mean_delay_ms,
+                latchup_marker,
             )
         };
         if let Some(x) = entry.to_server.as_ref() {
@@ -258,13 +319,22 @@ pub fn print_summary(p: &::std::path::Path) -> Result<()> {
         if let Some(x) = entry.from_server.as_ref() {
             fromserv = q(x);
         }
+        let rtpmim = if entry.conditions.rtpmimic {
+            "R"
+        } else {
+            " "
+        };
         println!(
-            "{:7} | {:5} || {:26} || {:26}",
+            "{}{:6} | {:5} || {:29} || {:29}",
+            rtpmim,
             entry.conditions.kbps(),
             entry.conditions.packetsize,
             toserv,
             fromserv,
         );
+        if verbose {
+            entry.print_to_stdout();
+        }
     }
     Ok(())
 }

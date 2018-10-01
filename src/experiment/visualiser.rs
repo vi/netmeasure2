@@ -3,7 +3,8 @@ use super::results::{ExperimentResults,DelayModel,LossModel,ResultsForStoring};
 use crate::Result;
 use super::results::{CLUSTERS,DELAY_DELTAS,DELAY_VALUES};
 
-fn bar(x:f32) -> &'static str {
+fn bar(mut x:f32) -> &'static str {
+    if x<0.0 { x=-x };
     if x < 0.005 { return ""; }
     if x < 0.01 { return "-"; }
     if x < 0.02 { return "+"; }
@@ -170,10 +171,14 @@ impl ExperimentResults {
         };
         deltas_values.sort_by_key(|(c,_v)|*c);
 
-        deltas_report.push(format!("Delay deltas:"));
+        deltas_report.push(format!(
+            "Delay deltas (latchiness={:.2}):",
+            self.latchiness(),
+        ));
         let mut prevskipped = false;
         for (c,v) in deltas_values {
-            if v < 0.001 {
+            let vv = v * (c as f32);
+            if v < 0.001 && vv < 0.01 {
                 if !prevskipped {
                     deltas_report.push(format!("..."));
                     prevskipped = true;
@@ -184,10 +189,12 @@ impl ExperimentResults {
             }
 
             deltas_report.push(format!(
-                "{:5} {:1.4} {:8}",
+                "{:5} {:1.4} {:8}  @ {:+3.4} {:8}",
                 c,
                 v,
                 bar(v),
+                vv,
+                bar(vv/10.0),
             ));
         }
         print_side_by_side(&delay_report, &deltas_report);

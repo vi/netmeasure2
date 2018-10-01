@@ -1,7 +1,7 @@
 use super::receiver::Info;
 use super::results::{ExperimentResults,DelayModel,LossModel};
 use crate::Result;
-use super::results::{CLUSTERS,DELAY_DELTAS,DELAY_VALUES};
+use super::results::{CLUSTERS,DELAY_DELTAS,DELAY_VALUES,ZERO_DELTA_IDX};
 
 
 pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
@@ -29,7 +29,7 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
     r.loss_model.nonloss[CLUSTERS.len()-1]=NONZERO_BUT_SMALL;
     r.loss_model.loss[0]=NONZERO_BUT_SMALL;
     r.delay_model.value_popularity[0] = NONZERO_BUT_SMALL;
-    r.delay_model.delta_popularity[0] = NONZERO_BUT_SMALL;
+    r.delay_model.delta_popularity[ZERO_DELTA_IDX] = NONZERO_BUT_SMALL;
 
     //use ::rand::{FromEntropy,rngs::SmallRng};
     //let mut rnd = SmallRng::from_entropy();
@@ -119,6 +119,34 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
     r.loss_model.loss_prob = 1.0 - tmp.len() as f32 / total as f32;
     r.delay_model.mean_delay_ms = delaysum / tmp.len() as f32;
     r
+}
+
+impl ExperimentResults {
+    /// Network lockups with subsequent accelerates, like in poor mobile networks.
+    pub fn latchiness(&self) -> f32 {
+        let mut s = 0.0;
+        for (i,v) in self.delay_model.delta_popularity.iter().enumerate() {
+            let delta = DELAY_DELTAS[i];
+            let delay_contrbution = (DELAY_DELTAS[i] as f32) * v;
+            if delta > 200 {
+                s += delay_contrbution;
+            }
+        }
+        s
+    }
+
+    /// Reverse of latchiness
+    pub fn delay_abrupt_decreaseness(&self) -> f32 {
+        let mut s = 0.0;
+        for (i,v) in self.delay_model.delta_popularity.iter().enumerate() {
+            let delta = DELAY_DELTAS[i];
+            let delay_contrbution = (DELAY_DELTAS[i] as f32) * v;
+            if delta < -200 {
+                s -= delay_contrbution;
+            }
+        }
+        s
+    }
 }
 
 pub fn read_and_analyse(p: &::std::path::Path) -> Result<()>  {

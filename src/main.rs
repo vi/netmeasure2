@@ -146,9 +146,16 @@ enum Cmd {
     #[structopt(name = "battery")]
     Battery(battery::Cmd),
 
-      /// Visualise previous saved data
+    /// Visualise previous saved data
     #[structopt(name = "showbat")]
     BatteryShow {
+        #[structopt(parse(from_os_str))]
+        file: ::std::path::PathBuf,
+    },
+
+    /// Visualise previous saved data (verbose)
+    #[structopt(name = "showbat_v")]
+    BatteryShowV {
         #[structopt(parse(from_os_str))]
         file: ::std::path::PathBuf,
     },
@@ -168,7 +175,8 @@ fn main() -> Result<()> {
         Cmd::BatteryInfo => battery::Battery::generate().show(),
         Cmd::BatteryBBInfo => battery::Battery::generate_bb().show(),
         Cmd::Battery(x) => battery::run(x)?,
-        Cmd::BatteryShow{file} => battery::print_summary(&file)?,
+        Cmd::BatteryShow{file} => battery::print_summary(&file, false)?,
+        Cmd::BatteryShowV{file} => battery::print_summary(&file, true)?,
     };
     Ok(())
 }

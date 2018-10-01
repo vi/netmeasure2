@@ -9,6 +9,9 @@ pub const DELAY_DELTAS: [i32; _] = [
 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 500, 1000,
 ]);
 
+pub const ZERO_DELTA_IDX : usize = 15;
+const_assert!(ZERO_DELTA_IDX_correct; DELAY_DELTAS[ZERO_DELTA_IDX] == 0);
+
 /// Hard-coded delays values. Must be sorted.
 counted_array!(
 pub const DELAY_VALUES: [i32; _] = [
