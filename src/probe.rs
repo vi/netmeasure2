@@ -22,6 +22,10 @@ pub struct CommunicOpts {
 
     #[structopt(long="save-raw-stats",short="R",parse(from_os_str))]
     save_raw_stats: Option<::std::path::PathBuf>,
+
+    /// Maximum number of seconds to wait for results
+    #[structopt(long="max-wait-for-results", default_value="15")]
+    max_wait_for_results: u64,
 }
 
 #[derive(Debug, StructOpt, Clone)]
@@ -67,6 +71,7 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
 
     let start = Instant::now() + Duration::from_micros(c2s.experiment.pending_start_in_microseconds as u64);
     let end = start + c2s.experiment.duration() + Duration::from_secs(1);
+    let mut end2 = end;
 
     let mut experiment_start_for_receiver = start;
 
@@ -173,7 +178,14 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
 
     loop {
         let now = Instant::now();
-        if !request_results && now > end {
+        let mut addendum = Duration::from_secs(0);
+        if let Some(ref rcv) = rcv {
+            let remaining = c2s.experiment.totalpackets as i64 - rcv.last_sqn() as i64;
+            if remaining > 4 {
+                addendum = Duration::from_secs(10);
+            }
+        }
+        if !request_results && now > end + addendum {
             eprintln!("Experiment finished");
             request_results = true;
 
@@ -182,9 +194,10 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
                     rcv.save_raw_data(srs);
                 }
             }
+            end2 = now;
         }
 
-        if request_results && now > end + Duration::from_secs(10) {
+        if request_results && now > end2 + Duration::from_secs(cmd.co.max_wait_for_results) {
             bail!("Timed out waiting for results");
         }
 
@@ -263,6 +276,10 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
                     c2s.seqn_for_rtt+=1;
                     ts_for_rtt_send.insert(c2s.seqn_for_rtt, Instant::now());
                     udp.send_to(::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice(), cmd.co.server)?;
+                }
+                if let Some(ref mut rcv) = rcv {
+                    eprintln!("(no packets getting received now)");
+                    rcv.no_packet_received();
                 }
             },
             Err(e) => Err(e)?,

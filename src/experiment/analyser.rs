@@ -65,6 +65,7 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
     // Step 3: accumulate statistics about loss clusters
     let mut nonloss_in_a_row : u32 = 0;
     let mut prev_seqn = 0;
+    let mut first = true;
     for (seqn,_) in tmp.iter() {
         let jump_in_seqns = seqn - prev_seqn;
         if (jump_in_seqns <= 1) {
@@ -75,7 +76,12 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
             }
             nonloss_in_a_row = 0;
             let loss_cluster = jump_in_seqns - 1;
-            register(loss_cluster as i32, &mut r.loss_model.loss, &CLUSTERS);
+            if first && prev_seqn == 0 {
+                r.loss_model.begin_lp = loss_cluster;
+                first = false;
+            } else {
+                register(loss_cluster as i32, &mut r.loss_model.loss, &CLUSTERS);
+            }
         }
         prev_seqn = *seqn;
     }
@@ -85,7 +91,8 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
     nonloss_in_a_row = 0;
     if prev_seqn + 1 < total as u32 {
         let last_loss_cluster = total as u32 - prev_seqn - 1;
-        register(last_loss_cluster as i32, &mut r.loss_model.loss,&CLUSTERS);
+        //register(last_loss_cluster as i32, &mut r.loss_model.loss,&CLUSTERS);
+        r.loss_model.end_lp = last_loss_cluster;
     }
 
     // Step 4: accumulate statistics and delay values and deltas;

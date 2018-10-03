@@ -67,6 +67,11 @@ impl ExperimentResults {
         let mut loss_report = vec![];
         let mut nonloss_report = vec![];
 
+        println!(
+            "Lost packets at the beginning: {}, at the end: {}",
+            self.loss_model.begin_lp,
+            self.loss_model.end_lp,
+        );
         loss_report.push(format!("Loss:"));
         {
             let mut prevskipped = false;

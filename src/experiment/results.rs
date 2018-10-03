@@ -39,6 +39,8 @@ pub struct LossModel {
     pub loss: [f32; CLUSTERS.len()],
     pub loss_prob: f32,
     pub sendside_loss: f32,
+    pub begin_lp: u32,
+    pub end_lp: u32,
 }
 
 #[derive(Debug,Default,Serialize,Deserialize,Clone)]

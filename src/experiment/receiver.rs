@@ -19,6 +19,7 @@ pub struct PacketReceiver {
     start: Instant,
     session_id: u64,
     ctr: usize,
+    cur_del_us: f64,
 }
 
 pub struct PacketReceiverParams {
@@ -41,6 +42,27 @@ impl PacketReceiver {
 
         self.v[self.ctr]=Info{rt_us, st_us, seqn};
         self.ctr += 1;
+
+        self.cur_del_us = 0.8 * self.cur_del_us + 0.2 * (rt_us as f64 - st_us as f64);
+    }
+
+    pub fn current_delay(&self) -> Duration {
+        Duration::from_micros(self.cur_del_us as u64)
+    }
+
+    /// for a while, no packet was received at all
+    pub fn no_packet_received(&mut self) {
+        /*if self.cur_del_us > 1000_000.0 {
+            self.cur_del_us = 1000_000.0;
+        }*/
+    }
+
+    pub fn last_sqn(&self) -> u32 {
+        if self.ctr == 0 {
+            0
+        } else {
+            self.v[self.ctr-1].seqn
+        }
     }
 
     pub fn new(prp: PacketReceiverParams) -> Self {
@@ -50,6 +72,7 @@ impl PacketReceiver {
             v: vec![Default::default(); prp.num_packets as usize],
             session_id: prp.session_id,
             ctr: 0,
+            cur_del_us: 0.0,
         }
     }
 

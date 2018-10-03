@@ -61,7 +61,17 @@ impl OngoingExperiment {
         Instant::now() > self.stop_time
     }
     fn expired2(&self) -> bool {
-        Instant::now() > self.stop_time + Duration::from_secs(2)
+        if let Some(ref rcv) = self.rcv {
+            let remaining = self.info.totalpackets as i64 - rcv.last_sqn() as i64;
+
+            if remaining > 4 {
+                Instant::now() > self.stop_time + Duration::from_secs(10)
+            } else {
+                Instant::now() > self.stop_time + Duration::from_secs(1)
+            }
+        } else {
+            Instant::now() > self.stop_time + Duration::from_secs(1)
+        }
     }
 }
 

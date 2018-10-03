@@ -24,6 +24,18 @@ pub struct Cmd {
     /// Do a big, half-a-gigabyte test for more broadband networks
     #[structopt(long="big")]
     big: bool,
+    
+    /// Do a normal test. This flag is no-op.
+    #[structopt(long="small")]
+    small: bool,
+
+    /// Maximum number of retries if non-first experiment is failed
+    #[structopt(long="max-retries", default_value="4")]
+    max_retries: usize,
+    
+    /// Wait this number of seconds after single experiment failure before retrying
+    #[structopt(long="wait-before-retry", default_value="30")]
+    wait_before_retry: u64,
 }
 
 fn getrand() -> XorShiftRng {
@@ -226,21 +238,10 @@ impl Battery {
     }
 }
 
-pub fn print_summary(p: &::std::path::Path, verbose: bool) -> Result<()> {
-    let mut f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
-    let v : Vec<ResultsForStoring> = ::serde_json::from_reader(f)?;
+impl ResultsForStoring {
+    pub fn short_summary(&self) -> String {
+        let entry = self;
 
-    use ::std::collections::BTreeMap;
-    let mut m : BTreeMap<u32, usize> = BTreeMap::new();
-
-    for (i,entry) in v.iter().enumerate() {
-        let kbps = entry.conditions.kbps();
-        m.insert(kbps, i);
-    }
-
-    println!("  kbps  | pktsz || ekbps_^ | loss_^ | delay_^    || ekbps_v | loss_v | delay_v  ");
-    for (_, &i) in m.iter() {
-        let entry = &v[i];
         let mut toserv = format!("");
         let mut fromserv = format!("");
         let q = |x : &ExperimentResults| {
@@ -270,6 +271,11 @@ pub fn print_summary(p: &::std::path::Path, verbose: bool) -> Result<()> {
                       lm.loss[1]+
                       lm.loss[2] >= 0.7 {
                 "r"
+            } else {
+                " "
+            };
+            let lost_attheend = if lm.end_lp > 100 {
+                "$"
             } else {
                 " "
             };
@@ -304,11 +310,12 @@ pub fn print_summary(p: &::std::path::Path, verbose: bool) -> Result<()> {
                 _ => "??",
             };
             format!(
-                "{:7.0} | {:4.1}{}{} | {:7.0} {}",
+                "{:7.0} | {:4.1}{}{}{}| {:7.0} {}",
                 ekbps,
                 lm.loss_prob*100.0,
                 loss_sendside,
                 loss_recoverability,
+                lost_attheend,
                 x.delay_model.mean_delay_ms,
                 latchup_marker,
             )
@@ -324,14 +331,33 @@ pub fn print_summary(p: &::std::path::Path, verbose: bool) -> Result<()> {
         } else {
             " "
         };
-        println!(
+        format!(
             "{}{:6} | {:5} || {:29} || {:29}",
             rtpmim,
             entry.conditions.kbps(),
             entry.conditions.packetsize,
             toserv,
             fromserv,
-        );
+        )
+    }
+}
+
+pub fn print_summary(p: &::std::path::Path, verbose: bool) -> Result<()> {
+    let mut f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
+    let v : Vec<ResultsForStoring> = ::serde_json::from_reader(f)?;
+
+    use ::std::collections::BTreeMap;
+    let mut m : BTreeMap<u32, usize> = BTreeMap::new();
+
+    for (i,entry) in v.iter().enumerate() {
+        let kbps = entry.conditions.kbps();
+        m.insert(kbps, i);
+    }
+
+    println!("  kbps  | pktsz || ekbps_^ | loss_^ | delay_^    || ekbps_v | loss_v | delay_v  ");
+    for (_, &i) in m.iter() {
+        let entry = &v[i];
+        println!("{}",entry.short_summary());
         if verbose {
             entry.print_to_stdout();
         }
@@ -372,17 +398,25 @@ pub fn print_summary(p: &::std::path::Path, verbose: bool) -> Result<()> {
                     Err(e) => {
                         eprintln!("Error: {}", e);
                         if i == 0 { bail!("First experiment failed") }
+                        if i < 3 {
+                            if format!("{}",e).contains("busy") {
+                                bail!("Server is probably busy with another session");
+                            }
+                        }
                         retries += 1;
-                        if retries == 3 {
-                            bail!("Three fails in a row");
+                        if retries == cmd.max_retries {
+                            bail!("Too many fails in a row, exiting");
                         } else {
-                            ::std::thread::sleep(::std::time::Duration::from_secs(20));
+                            ::std::thread::sleep(::std::time::Duration::from_secs(
+                                cmd.wait_before_retry,
+                            ));
                             continue;
                         }
                     },
                 }
             }
 
+            eprintln!("{}",v[i].short_summary());
             eprintln!("{}%", (i+1) * 100 / n);
         }
 

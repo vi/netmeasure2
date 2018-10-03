@@ -47,7 +47,7 @@ extern crate bincode;
 
 extern crate itertools;
 
-const API_VERSION: u32 = 5;
+const API_VERSION: u32 = 6;
 
 
 use self::enum_unitary::EnumUnitary;
