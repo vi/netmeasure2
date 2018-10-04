@@ -65,12 +65,16 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
         }
     }
 
-    // Step 3: accumulate statistics about loss clusters
+    // Step 3 and 4: accumulate statistics about loss clusters
+    // accumulate statistics and delay values and deltas;
     let mut nonloss_in_a_row : u32 = 0;
     let mut prev_seqn = 0;
     let mut first = true;
-    for (seqn,_) in tmp.iter() {
-        let jump_in_seqns = seqn - prev_seqn;
+
+    let mut delaysum = 0.0;
+    let mut prevdelay = 0;
+    for (seqn,d) in tmp.iter() {
+        let mut jump_in_seqns = seqn - prev_seqn;
         if (jump_in_seqns <= 1) {
             nonloss_in_a_row+=1;
         } else {
@@ -87,6 +91,29 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
             }
         }
         prev_seqn = *seqn;
+
+        register(*d as i32, &mut r.delay_model.value_popularity,&DELAY_VALUES);
+
+        let delay_jump = (*d - prevdelay) as i32;
+        match jump_in_seqns {
+            0..=1 => {
+                register(delay_jump, &mut r.delay_model.delta_noloss,&DELAY_DELTAS);
+            },
+            2 => {
+                register(delay_jump, &mut r.delay_model.delta_loss1,&DELAY_DELTAS);
+            },
+            3..=21 => {
+                register(delay_jump, &mut r.delay_model.delta_loss2_20,&DELAY_DELTAS);
+            },
+            _ => {
+                register(delay_jump, &mut r.delay_model.delta_lossmany,&DELAY_DELTAS);
+            },
+        }
+        
+
+
+        prevdelay = *d;
+        delaysum += *d as f32;
     }
     if nonloss_in_a_row > 0 {
         register(nonloss_in_a_row as i32, &mut r.loss_model.nonloss,&CLUSTERS);
@@ -96,16 +123,6 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
         let last_loss_cluster = total as u32 - prev_seqn - 1;
         //register(last_loss_cluster as i32, &mut r.loss_model.loss,&CLUSTERS);
         r.loss_model.end_lp = last_loss_cluster;
-    }
-
-    // Step 4: accumulate statistics and delay values and deltas;
-    let mut delaysum = 0.0;
-    let mut prevdelay = 0;
-    for (_,d) in tmp.iter() {
-        register(*d as i32, &mut r.delay_model.value_popularity,&DELAY_VALUES);
-        register((*d - prevdelay) as i32, &mut r.delay_model.delta_noloss,&DELAY_DELTAS);
-        prevdelay = *d;
-        delaysum += *d as f32;
     }
 
     // Step 5: Normalize results

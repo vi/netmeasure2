@@ -33,34 +33,42 @@ fn bar(mut x:f32) -> &'static str {
     "########"
 }
 
-fn print_side_by_side(a: &[String], b:&[String]) {
+fn print_side_by_side1(a: &[String], b:&[String]) -> Vec<String> {
     use ::itertools::{Itertools,EitherOrBoth};
+    let mut v = Vec::with_capacity(a.len()+b.len());
     for x in a.iter().zip_longest(b.iter()) {
         match x {
             EitherOrBoth::Both(a,b) => {
-                println!(
-                    "{:24} | {:24}",
+                v.push(format!(
+                    "{:41} | {:41}",
                     a,
                     b,
-                );
+                ));
             },
             EitherOrBoth::Left(a) => {
-                println!(
-                    "{:24} | {:24}",
+                v.push(format!(
+                    "{:41} | {:41}",
                     a,
                     "",
-                );
+                ));
             },
             EitherOrBoth::Right(b) => {
-                println!(
-                    "{:24} | {:24}",
+                v.push(format!(
+                    "{:41} | {:41}",
                     "",
                     b,
-                );
+                ));
             },
         }
+    };
+    v
+}
+fn print_side_by_side(a: &[String], b:&[String])  {
+    for l in &print_side_by_side1(a,b) {
+        println!("{}",l);
     }
 }
+
 
 impl ExperimentResults {
     pub fn visualise_loss(&self) {
@@ -166,42 +174,84 @@ impl ExperimentResults {
             ));
         }
 
-        let mut deltas_report = vec![];
+        let mut deltas_report1 = vec![];
+        let mut deltas_report2 = vec![];
 
         let mut deltas_values = vec![];
 
         for (i,&c) in DELAY_DELTAS.iter().enumerate() {
-            let v = self.delay_model.delta_noloss[i];
-            deltas_values.push((c,v));
+            let d1 = self.delay_model.delta_noloss[i];
+            let d2 = self.delay_model.delta_loss1[i];
+            let d3 = self.delay_model.delta_loss2_20[i];
+            let d4 = self.delay_model.delta_lossmany[i];
+            deltas_values.push((c,(d1,d2,d3,d4)));
         };
-        deltas_values.sort_by_key(|(c,_v)|*c);
+        deltas_values.sort_by_key(|(c,_)|*c);
 
-        deltas_report.push(format!(
-            "Delay deltas (latchiness={:.2}):",
-            self.latchiness(),
-        ));
-        let mut prevskipped = false;
-        for (c,v) in deltas_values {
-            let vv = v * (c as f32);
-            if v < 0.001 && vv < 0.01 {
-                if !prevskipped {
-                    deltas_report.push(format!("..."));
-                    prevskipped = true;
+        let mut prevskipped;
+        macro_rules! chunk_of_code {
+            ($c:ident, $v:ident, $report:ident) => {
+                let v = *$v;
+                let c = *$c;
+                let vv = v * (c as f32);
+                if v < 0.001 && vv < 0.01 {
+                    if !prevskipped {
+                        $report.push(format!("..."));
+                        prevskipped = true;
+                    }
+                    continue;
+                } else {
+                    prevskipped = false;
                 }
-                continue;
-            } else {
-                prevskipped = false;
-            }
 
-            deltas_report.push(format!(
-                "{:5} {:1.4} {:8}  @ {:+3.4} {:8}",
-                c,
-                v,
-                bar(v),
-                vv,
-                bar(vv/10.0),
-            ));
+                $report.push(format!(
+                    "{:5} {:1.4} {:8}  @ {:+3.4} {:8}",
+                    c,
+                    v,
+                    bar(v),
+                    vv,
+                    bar(vv/10.0),
+                ));
+            };
         }
+
+        deltas_report1.push(format!(
+            "Delay deltas (no loss):",
+            //self.latchiness(),
+        ));
+        prevskipped = false;
+        for (ref c,(ref v,_,_,_)) in &deltas_values {
+            chunk_of_code!(c,v, deltas_report1);
+        }
+
+        deltas_report2.push(format!(
+            "Delay deltas (l 1 pkt):",
+            //self.latchiness(),
+        ));
+        prevskipped = false;
+        for (ref c,(_,ref v,_,_)) in &deltas_values {
+            chunk_of_code!(c,v, deltas_report2);
+        }
+
+        deltas_report1.push(format!(
+            "Delay deltas (l 2-20 pkt):",
+            //self.latchiness(),
+        ));
+        prevskipped = false;
+        for (ref c,(_,_,ref v,_)) in &deltas_values {
+            chunk_of_code!(c,v, deltas_report1);
+        }
+
+        deltas_report2.push(format!(
+            "Delay deltas (l many pkt):",
+            //self.latchiness(),
+        ));
+        prevskipped = false;
+        for (ref c,(_,_,_,ref v)) in &deltas_values {
+            chunk_of_code!(c,v, deltas_report2);
+        }
+
+        let deltas_report = print_side_by_side1(&deltas_report1, &deltas_report2);
         print_side_by_side(&delay_report, &deltas_report);
     }
 }
