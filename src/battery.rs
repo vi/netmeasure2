@@ -365,6 +365,13 @@ pub fn print_summary(p: &::std::path::Path, verbose: bool) -> Result<()> {
     Ok(())
 }
 
+pub fn migrate(p: &::std::path::Path) -> Result<()> {
+    let mut f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
+    let v : Vec<ResultsForStoring> = ::serde_json::from_reader(f)?;
+    ::serde_json::ser::to_writer(&mut ::std::io::stdout().lock(), &v)?;
+    Ok(())
+}
+
     pub fn run(cmd:Cmd) -> Result<()> {
         let mut v = vec![];
 
@@ -397,12 +404,12 @@ pub fn print_summary(p: &::std::path::Path, verbose: bool) -> Result<()> {
                     },
                     Err(e) => {
                         eprintln!("Error: {}", e);
-                        if i == 0 { bail!("First experiment failed") }
                         if i < 3 {
                             if format!("{}",e).contains("busy") {
                                 bail!("Server is probably busy with another session");
                             }
                         }
+                        if i == 0 { bail!("First experiment failed") }
                         retries += 1;
                         if retries == cmd.max_retries {
                             bail!("Too many fails in a row, exiting");

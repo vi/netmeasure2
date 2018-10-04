@@ -47,7 +47,7 @@ extern crate bincode;
 
 extern crate itertools;
 
-const API_VERSION: u32 = 6;
+const API_VERSION: u32 = 7;
 
 
 use self::enum_unitary::EnumUnitary;
@@ -159,6 +159,13 @@ enum Cmd {
         #[structopt(parse(from_os_str))]
         file: ::std::path::PathBuf,
     },
+
+    /// Try migrating battery results to new format
+    #[structopt(name = "batmigrate")]
+    BatteryMigrate {
+        #[structopt(parse(from_os_str))]
+        file: ::std::path::PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -177,6 +184,7 @@ fn main() -> Result<()> {
         Cmd::Battery(x) => battery::run(x)?,
         Cmd::BatteryShow{file} => battery::print_summary(&file, false)?,
         Cmd::BatteryShowV{file} => battery::print_summary(&file, true)?,
+        Cmd::BatteryMigrate{file} => battery::migrate(&file)?,
     };
     Ok(())
 }

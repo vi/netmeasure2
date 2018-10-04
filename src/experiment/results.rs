@@ -22,7 +22,24 @@ pub const DELAY_VALUES: [i32; _] = [
 #[derive(Debug,Default,Serialize,Deserialize,Clone)]
 pub struct DelayModel {
     pub value_popularity: [f32; DELAY_VALUES.len()],
-    pub delta_popularity: [f32; DELAY_DELTAS.len()],
+
+    /// Distribution of delay jumps after no lost packets
+    #[serde(default)]
+    pub delta_noloss: [f32; DELAY_DELTAS.len()],
+
+    /// Distribution of delay jumps after exactly 1 lost packet
+    #[serde(default)]
+    pub delta_loss1: [f32; DELAY_DELTAS.len()],
+
+    /// Distribution of delay jumps after losing 2 to 20 packets
+    #[serde(default)]
+    pub delta_loss2_20: [f32; DELAY_DELTAS.len()],
+
+    /// Distribution of delay jumps after losing more than 20 packets
+    #[serde(default)]
+    pub delta_lossmany: [f32; DELAY_DELTAS.len()],
+    /// Distribution of delay jumps after losing more than 1 packet
+    
     pub mean_delay_ms: f32,
 }
 
@@ -57,17 +74,23 @@ pub struct ResultsForStoring {
     pub from_server: Option<Rc<ExperimentResults>>,
     pub conditions: super::statement::ExperimentInfo,
     pub rtt_us: u32,
+
+    #[serde(default)]
+    pub api_version: u32,
 }
 
 const ER_SIZE : usize = ::std::mem::size_of::<ExperimentResults>() * 3/2 + 64;
-const_assert!(er_fits_udp_packet; ER_SIZE < 1200);
+const_assert!(er_fits_udp_packet; ER_SIZE < 1420);
 
 pub fn dump_some_results() -> Result<()>  {
     let mut r = ExperimentResults::default();
     let mut rnd = ::rand::thread_rng();
     use ::rand::Rng;
     for v in r.delay_model.value_popularity.iter_mut() { *v = rnd.gen(); }
-    for v in r.delay_model.delta_popularity.iter_mut() { *v = rnd.gen(); }
+    for v in r.delay_model.delta_noloss.iter_mut() { *v = rnd.gen(); }
+    for v in r.delay_model.delta_loss1.iter_mut() { *v = rnd.gen(); }
+    for v in r.delay_model.delta_loss2_20.iter_mut() { *v = rnd.gen(); }
+    for v in r.delay_model.delta_lossmany.iter_mut() { *v = rnd.gen(); }
     for v in r.loss_model.nonloss          .iter_mut() { *v = rnd.gen(); }
     for v in r.loss_model.loss             .iter_mut() { *v = rnd.gen(); }
     let rpl = super::statement::ExperimentReply::HereAreResults{

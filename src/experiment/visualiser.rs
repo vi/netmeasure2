@@ -171,7 +171,7 @@ impl ExperimentResults {
         let mut deltas_values = vec![];
 
         for (i,&c) in DELAY_DELTAS.iter().enumerate() {
-            let v = self.delay_model.delta_popularity[i];
+            let v = self.delay_model.delta_noloss[i];
             deltas_values.push((c,v));
         };
         deltas_values.sort_by_key(|(c,_v)|*c);

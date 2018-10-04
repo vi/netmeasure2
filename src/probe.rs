@@ -326,6 +326,7 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
         from_server,
         conditions: c2s.experiment,
         rtt_us,
+        api_version: crate::API_VERSION,
     };
     Ok(final_result)
 }

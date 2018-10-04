@@ -29,7 +29,10 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
     r.loss_model.nonloss[CLUSTERS.len()-1]=NONZERO_BUT_SMALL;
     r.loss_model.loss[0]=NONZERO_BUT_SMALL;
     r.delay_model.value_popularity[0] = NONZERO_BUT_SMALL;
-    r.delay_model.delta_popularity[ZERO_DELTA_IDX] = NONZERO_BUT_SMALL;
+    r.delay_model.delta_noloss[ZERO_DELTA_IDX] = NONZERO_BUT_SMALL;
+    r.delay_model.delta_loss1[ZERO_DELTA_IDX] = NONZERO_BUT_SMALL;
+    r.delay_model.delta_loss2_20[ZERO_DELTA_IDX] = NONZERO_BUT_SMALL;
+    r.delay_model.delta_lossmany[ZERO_DELTA_IDX] = NONZERO_BUT_SMALL;
 
     //use ::rand::{FromEntropy,rngs::SmallRng};
     //let mut rnd = SmallRng::from_entropy();
@@ -100,7 +103,7 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
     let mut prevdelay = 0;
     for (_,d) in tmp.iter() {
         register(*d as i32, &mut r.delay_model.value_popularity,&DELAY_VALUES);
-        register((*d - prevdelay) as i32, &mut r.delay_model.delta_popularity,&DELAY_DELTAS);
+        register((*d - prevdelay) as i32, &mut r.delay_model.delta_noloss,&DELAY_DELTAS);
         prevdelay = *d;
         delaysum += *d as f32;
     }
@@ -121,18 +124,30 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
     normalize(&mut r.loss_model.nonloss);
     normalize(&mut r.loss_model.loss);
     normalize(&mut r.delay_model.value_popularity);
-    normalize(&mut r.delay_model.delta_popularity);
+    normalize(&mut r.delay_model.delta_noloss);
+    normalize(&mut r.delay_model.delta_loss1);
+    normalize(&mut r.delay_model.delta_loss2_20);
+    normalize(&mut r.delay_model.delta_lossmany);
     r.total_received_packets=tmp.len() as u32;
     r.loss_model.loss_prob = 1.0 - tmp.len() as f32 / total as f32;
-    r.delay_model.mean_delay_ms = delaysum / tmp.len() as f32;
+    r.delay_model.mean_delay_ms = if tmp.len() > 0 {
+        delaysum / tmp.len() as f32 
+    } else {
+        9999.0
+    };
     r
+}
+
+/// Summary for one-sided experiment, based on delay and loss
+struct Summary {
+    
 }
 
 impl ExperimentResults {
     /// Network lockups with subsequent accelerates, like in poor mobile networks.
     pub fn latchiness(&self) -> f32 {
         let mut s = 0.0;
-        for (i,v) in self.delay_model.delta_popularity.iter().enumerate() {
+        for (i,v) in self.delay_model.delta_noloss.iter().enumerate() {
             let delta = DELAY_DELTAS[i];
             let delay_contrbution = (DELAY_DELTAS[i] as f32) * v;
             if delta > 200 {
@@ -145,7 +160,7 @@ impl ExperimentResults {
     /// Reverse of latchiness
     pub fn delay_abrupt_decreaseness(&self) -> f32 {
         let mut s = 0.0;
-        for (i,v) in self.delay_model.delta_popularity.iter().enumerate() {
+        for (i,v) in self.delay_model.delta_noloss.iter().enumerate() {
             let delta = DELAY_DELTAS[i];
             let delay_contrbution = (DELAY_DELTAS[i] as f32) * v;
             if delta < -200 {
