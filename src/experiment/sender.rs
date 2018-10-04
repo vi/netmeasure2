@@ -69,7 +69,9 @@ impl Sender {
                 BE::write_u32(&mut pkt[4..8], ts * 90 / 1000);
             }
             
-            udp.send_to(&pkt[..], to)?;
+            if let Err(_) = udp.send_to(&pkt[..], to) {
+                lost += 1;
+            }
         }
         eprintln!("Sender stopped");
 
