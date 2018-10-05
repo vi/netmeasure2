@@ -164,7 +164,7 @@ pub fn print_summary(p: &::std::path::Path, verbose: bool) -> Result<()> {
 }
 
 pub fn migrate(p: &::std::path::Path) -> Result<()> {
-    let mut f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
+    let f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
     let v : Vec<ResultsForStoring> = ::serde_json::from_reader(f)?;
     ::serde_json::ser::to_writer(&mut ::std::io::stdout().lock(), &v)?;
     Ok(())

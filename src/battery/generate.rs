@@ -37,7 +37,7 @@ impl Battery {
         let mut heavyweight = 0;
 
         while v.len() < 50 {
-            let mut packetsize = if r.gen_bool(0.5) {
+            let packetsize = if r.gen_bool(0.5) {
                 r.gen_range(100,1537)
             } else {
                 r.gen_range(32,100)
@@ -122,7 +122,7 @@ impl Battery {
         let mut heavyweight = 0;
 
         while v.len() < 50 {
-            let mut packetsize = if r.gen_bool(0.5) {
+            let packetsize = if r.gen_bool(0.5) {
                 r.gen_range(256,1537)
             } else {
                 r.gen_range(80,256)

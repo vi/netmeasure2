@@ -168,7 +168,7 @@ impl State {
                     Some(PacketReceiver::new(prp))
                 } else { None };
 
-                let mut oe = OngoingExperiment {
+                let oe = OngoingExperiment {
                     cla,
                     info: rq,
                     start_time:  experiment_start,

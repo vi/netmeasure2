@@ -22,7 +22,7 @@ impl Sender {
     pub fn run(&self, udp: UdpSocket, to:SocketAddr) -> Result<u32> {
         assert!(self.packetsize >= MINPACKETSIZE);
 
-        let mut sleeper = ::spin_sleep::SpinSleeper::default();
+        let sleeper = ::spin_sleep::SpinSleeper::default();
         
         let mut pkt = vec![0; self.packetsize];
 
@@ -44,7 +44,7 @@ impl Sender {
 
         for seqn in 0..self.packetcount {
             let n = now();
-            let mut t = self.experiment_start + self.delay_between_packets * seqn;
+            let t = self.experiment_start + self.delay_between_packets * seqn;
             if n <= t {
                 sleeper.sleep(t - n);
                 //::std::thread::sleep(t-n);

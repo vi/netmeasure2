@@ -290,7 +290,7 @@ impl ResultsForStoring {
 }
 
 pub fn read_and_visualize(p: &::std::path::Path) -> Result<()>  {
-    let mut f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
+    let f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
     let r : ResultsForStoring = ::serde_json::from_reader(f)?;
     r.print_to_stdout();
     Ok(())

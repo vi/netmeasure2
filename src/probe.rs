@@ -321,7 +321,7 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
         }
         rtt_us = dur.as_us() / count;
     }
-    let mut final_result = ResultsForStoring {
+    let final_result = ResultsForStoring {
         to_server: results_,
         from_server,
         conditions: c2s.experiment,
@@ -340,7 +340,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
     } else {
         let out : Box<dyn(::std::io::Write)>;
         if let Some(pb) = cmd.output {
-            let mut f = ::std::fs::File::create(pb)?;
+            let f = ::std::fs::File::create(pb)?;
             out = Box::new(f);
             if cmd.visualise {
                 final_result.print_to_stdout();

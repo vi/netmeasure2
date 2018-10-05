@@ -37,7 +37,7 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
     //use ::rand::{FromEntropy,rngs::SmallRng};
     //let mut rnd = SmallRng::from_entropy();
 
-    fn register(mut x: i32, v: &mut [f32], registry:&[i32] ) {
+    fn register(x: i32, v: &mut [f32], registry:&[i32] ) {
         //eprintln!("regcl {} in {:?}", x, v as *mut [f32]);
         match (registry.binary_search(&(x as i32))) {
             Ok(i) => v[i]+=1.0,
@@ -74,7 +74,7 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
     let mut delaysum = 0.0;
     let mut prevdelay = 0;
     for (seqn,d) in tmp.iter() {
-        let mut jump_in_seqns = seqn - prev_seqn;
+        let jump_in_seqns = seqn - prev_seqn;
         if (jump_in_seqns <= 1) {
             nonloss_in_a_row+=1;
         } else {
