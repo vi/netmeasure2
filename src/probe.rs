@@ -73,7 +73,7 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
     let end = start + c2s.experiment.duration() + Duration::from_secs(1);
     let mut end2 = end;
 
-    let mut experiment_start_for_receiver = start;
+    let experiment_start_for_receiver;
 
     let mut ts_for_rtt_send = ::std::collections::BTreeMap::<u32, Instant>::new();
     let mut ts_for_rtt_recv = ::std::collections::BTreeMap::<u32, Instant>::new();
@@ -85,7 +85,7 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
             eprintln!(" timeout");
             bail!("timeout");
         }
-        let ttg = (start - now);
+        let ttg = start - now;
         c2s.experiment.pending_start_in_microseconds = ttg.as_us();
         eprint!(".");
         //eprintln!("{:?}", c2s);
@@ -94,7 +94,7 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
         udp.send_to(::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice(), cmd.co.server)?;
         match udp.recv_from(&mut buf) {
             Ok((ret,from)) => {
-                if (from != cmd.co.server) {
+                if from != cmd.co.server {
                     eprintln!("Foreign packet");
                     continue;
                 }

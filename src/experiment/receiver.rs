@@ -82,6 +82,7 @@ impl PacketReceiver {
         r
     }
 
+    #[allow(unused_parens)]
     pub fn save_raw_data(&self, dir: &::std::path::Path) {
         if let Err(e) = (try {
             let p = dir.join(format!("{}.dat",self.session_id));

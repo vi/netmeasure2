@@ -191,6 +191,7 @@ impl State {
 }
 
 
+#[allow(unused_parens)]
 pub fn serve(cmd:Cmd) -> Result<()> {
     let mut udp = UdpSocket::bind(cmd.sa)?;
     println!("Listening {}", cmd.sa);

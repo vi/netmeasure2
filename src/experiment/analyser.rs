@@ -13,7 +13,7 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
         tmp.push((*seqn, delay));
         if mindelay_ms > delay { mindelay_ms = delay };
     }
-    if (mindelay_ms < 0) {
+    if mindelay_ms < 0 {
         for (_seqn,ref mut d) in tmp.iter_mut() {
             *d -= mindelay_ms;
         }
@@ -75,7 +75,7 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
     let mut prevdelay = 0;
     for (seqn,d) in tmp.iter() {
         let jump_in_seqns = seqn - prev_seqn;
-        if (jump_in_seqns <= 1) {
+        if jump_in_seqns <= 1 {
             nonloss_in_a_row+=1;
         } else {
             if nonloss_in_a_row > 0 {
@@ -118,7 +118,6 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
     if nonloss_in_a_row > 0 {
         register(nonloss_in_a_row as i32, &mut r.loss_model.nonloss,&CLUSTERS);
     }
-    nonloss_in_a_row = 0;
     if prev_seqn + 1 < total as u32 {
         let last_loss_cluster = total as u32 - prev_seqn - 1;
         //register(last_loss_cluster as i32, &mut r.loss_model.loss,&CLUSTERS);
@@ -156,7 +155,7 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
 }
 
 /// Summary for one-sided experiment, based on delay and loss
-struct Summary {
+struct _Summary {
     
 }
 
