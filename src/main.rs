@@ -57,7 +57,6 @@ use self::structopt::StructOpt;
 use std::net::SocketAddr;
 
 pub mod experiment;
-pub mod numplay;
 pub mod serve;
 pub mod probe;
 pub mod battery;
@@ -111,10 +110,6 @@ enum Cmd {
     /// Send experiment request to the specified UDP socket and do the experiment
     #[structopt(name = "probe")]
     Probe(probe::Cmd),
-
-    /// Run some numeric experiment
-    #[structopt(name = "n")]
-    Numplay(numplay::Numplay),
 
     RDump,
 
@@ -174,7 +169,6 @@ fn main() -> Result<()> {
     match cmd {
         Cmd::Serve(x) => serve::serve(x)?,
         Cmd::Probe(x) =>  probe::probe(x)?,
-        Cmd::Numplay(x) => numplay::numplay(x)?,
         Cmd::RDump => experiment::results::dump_some_results()?,
         Cmd::DumpSavedRawStats{file} => experiment::receiver::PacketReceiver::dump_raw_data(&file)?,
         Cmd::AnalyseRaw{file} => experiment::analyser::read_and_analyse(&file)?,
