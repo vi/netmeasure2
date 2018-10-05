@@ -112,7 +112,7 @@ impl State {
 
                 if let Some(snd) = oe.snd.take() {
                     match snd.join() {
-                        Err(e) => { bail!("sender thread panicked"); },
+                        Err(_e) => { bail!("sender thread panicked"); },
                         Ok(x) => {
                             let lost = x?;
                             ce.snd = Some(lost);
@@ -132,7 +132,7 @@ impl State {
 
     fn start_experiment(&mut self, cla: SocketAddr, udp: &mut UdpSocket, rq: ExperimentInfo) -> Result<&mut OngoingExperiment> {
         match self {
-            State::ExperimentIsOngoing(oe) => {
+            State::ExperimentIsOngoing(_oe) => {
                 panic!();
             },
             State::Idle(_,_) => {

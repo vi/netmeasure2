@@ -67,7 +67,7 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
 
     let mut buf = [0; 1536];
 
-    let s2c : crate::ServerToClient;
+    let _s2c : crate::ServerToClient;
 
     let start = Instant::now() + Duration::from_micros(c2s.experiment.pending_start_in_microseconds as u64);
     let end = start + c2s.experiment.duration() + Duration::from_secs(1);
@@ -244,10 +244,10 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
 
                 match s2c.reply {
                     ExperimentReply::Busy => bail!("Server busy 2"),
-                    ExperimentReply::Accepted{session_id,remaining_warmup_time_us} => {
+                    ExperimentReply::Accepted{session_id: _,remaining_warmup_time_us: _} => {
                         continue;  
                     },
-                    ExperimentReply::IsOngoing{session_id,elapsed_time_us} => {
+                    ExperimentReply::IsOngoing{session_id: _,elapsed_time_us: _} => {
                         continue;
                     },
                     ExperimentReply::ResourceLimits{msg} => {
@@ -264,7 +264,7 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
                         results_ = stats;
                         break;
                     },
-                    ExperimentReply::RetryWithASessionId{session_id} => bail!("Unexpected retryWSId"),
+                    ExperimentReply::RetryWithASessionId{session_id: _} => bail!("Unexpected retryWSId"),
                     ExperimentReply::Failed{msg} => {
                         eprintln!("{}",msg);
                         bail!("Fail reply from server 2");
@@ -290,7 +290,7 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
     let mut my_send_lost = None;
     if let Some(snd) = snd {
         match snd.join() {
-            Err(e) => { bail!("sender thread panicked"); },
+            Err(_e) => { bail!("sender thread panicked"); },
             Ok(x) => {
                 let lost = x?;
                 my_send_lost = Some(lost);
