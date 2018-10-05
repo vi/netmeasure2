@@ -144,7 +144,7 @@ enum Cmd {
 
     /// Run entire test battery
     #[structopt(name = "battery")]
-    Battery(battery::Cmd),
+    Battery(battery::run::Cmd),
 
     /// Visualise previous saved data
     #[structopt(name = "showbat")]
@@ -181,10 +181,10 @@ fn main() -> Result<()> {
         Cmd::Show{file} => experiment::visualiser::read_and_visualize(&file)?,
         Cmd::BatteryInfo => battery::Battery::generate().show(),
         Cmd::BatteryBBInfo => battery::Battery::generate_bb().show(),
-        Cmd::Battery(x) => battery::run(x)?,
-        Cmd::BatteryShow{file} => battery::print_summary(&file, false)?,
-        Cmd::BatteryShowV{file} => battery::print_summary(&file, true)?,
-        Cmd::BatteryMigrate{file} => battery::migrate(&file)?,
+        Cmd::Battery(x) => x.run()?,
+        Cmd::BatteryShow{file} => battery::visualise::print_summary(&file, false)?,
+        Cmd::BatteryShowV{file} => battery::visualise::print_summary(&file, true)?,
+        Cmd::BatteryMigrate{file} => battery::visualise::migrate(&file)?,
     };
     Ok(())
 }
