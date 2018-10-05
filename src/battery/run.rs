@@ -101,7 +101,7 @@ impl Cmd {
         } else {
             let out : Box<dyn(::std::io::Write)>;
             if let Some(pb) = cmd.output {
-                let mut f = ::std::fs::File::create(pb)?;
+                let f = ::std::fs::File::create(pb)?;
                 out = Box::new(f);
                 if cmd.visualise {
                     println!("Visualise not implemented");

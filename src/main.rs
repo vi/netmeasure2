@@ -5,7 +5,7 @@
 #![feature(convert_id)]
 #![feature(nll)]
 
-#![allow(unused)]
+#![allow(unused_imports)]
 #![deny(unused_must_use)]
 
 #[macro_use]

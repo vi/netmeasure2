@@ -141,7 +141,7 @@ impl Battery {
 
 
 pub fn print_summary(p: &::std::path::Path, verbose: bool) -> Result<()> {
-    let mut f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
+    let f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
     let v : Vec<ResultsForStoring> = ::serde_json::from_reader(f)?;
 
     use ::std::collections::BTreeMap;
