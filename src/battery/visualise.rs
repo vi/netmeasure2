@@ -7,7 +7,7 @@ use crate::Result;
 use super::Battery;
 
 
-#[derive(Debug,EnumString)]
+#[derive(Debug,EnumString,Clone,Copy)]
 pub enum SortOrder {
     #[strum(serialize = "time")]
     Time,
@@ -26,11 +26,15 @@ pub struct BatteryShow {
 
     #[structopt(long="verbose",short="v")]
     verbose: bool,
+
+    /// kbps(default), rate (packet rate), size (packet size), time
+    #[structopt(long="sort",short="s",default_value="kbps")]
+    sort: SortOrder,
 }
 
 impl BatteryShow {
     pub fn run(&self) -> Result<()> {
-        print_summary(&self.file, self.verbose)
+        print_summary(&self.file, self.verbose, self.sort)
     }
 }
 
@@ -155,16 +159,21 @@ impl Battery {
 }
 
 
-pub fn print_summary(p: &::std::path::Path, verbose: bool) -> Result<()> {
+pub fn print_summary(p: &::std::path::Path, verbose: bool, sort_order: SortOrder) -> Result<()> {
     let f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
     let v : Vec<ResultsForStoring> = ::serde_json::from_reader(f)?;
 
     use ::std::collections::BTreeMap;
-    let mut m : BTreeMap<u32, usize> = BTreeMap::new();
+    let mut m : BTreeMap<u64, usize> = BTreeMap::new();
 
     for (i,entry) in v.iter().enumerate() {
-        let kbps = entry.conditions.kbps();
-        m.insert(kbps, i);
+        let sortkey = match sort_order {
+            SortOrder::Kbps => entry.conditions.kbps() as u64,
+            SortOrder::Time => i as u64,
+            SortOrder::PktRate => entry.conditions.packetdelay_us as u64,
+            SortOrder::PktSize => entry.conditions.packetsize as u64,
+        };
+        m.insert(sortkey, i);
     }
 
     println!("  kbps  | pktsz || ekbps_^ | loss_^ | delay_^    || ekbps_v | loss_v | delay_v  ");
