@@ -19,6 +19,21 @@ pub enum SortOrder {
     PktRate,
 }
 
+#[derive(StructOpt,Debug)]
+pub struct BatteryShow {
+    #[structopt(parse(from_os_str))]
+    file: ::std::path::PathBuf,
+
+    #[structopt(long="verbose",short="v")]
+    verbose: bool,
+}
+
+impl BatteryShow {
+    pub fn run(&self) -> Result<()> {
+        print_summary(&self.file, self.verbose)
+    }
+}
+
 impl ResultsForStoring {
     pub fn short_summary(&self) -> String {
         let entry = self;

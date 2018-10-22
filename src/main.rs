@@ -143,17 +143,7 @@ enum Cmd {
 
     /// Visualise previous saved data
     #[structopt(name = "showbat")]
-    BatteryShow {
-        #[structopt(parse(from_os_str))]
-        file: ::std::path::PathBuf,
-    },
-
-    /// Visualise previous saved data (verbose)
-    #[structopt(name = "showbat_v")]
-    BatteryShowV {
-        #[structopt(parse(from_os_str))]
-        file: ::std::path::PathBuf,
-    },
+    BatteryShow(battery::visualise::BatteryShow),
 
     /// Try migrating battery results to new format
     #[structopt(name = "batmigrate")]
@@ -176,8 +166,7 @@ fn main() -> Result<()> {
         Cmd::BatteryInfo => battery::Battery::generate().show(),
         Cmd::BatteryBBInfo => battery::Battery::generate_bb().show(),
         Cmd::Battery(x) => x.run()?,
-        Cmd::BatteryShow{file} => battery::visualise::print_summary(&file, false)?,
-        Cmd::BatteryShowV{file} => battery::visualise::print_summary(&file, true)?,
+        Cmd::BatteryShow(x) => x.run()?,
         Cmd::BatteryMigrate{file} => battery::visualise::migrate(&file)?,
     };
     Ok(())
