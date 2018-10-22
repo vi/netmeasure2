@@ -39,7 +39,7 @@ pub fn analyse(v: &[Info], total:usize) -> ExperimentResults {
 
     fn register(x: i32, v: &mut [f32], registry:&[i32] ) {
         //eprintln!("regcl {} in {:?}", x, v as *mut [f32]);
-        match (registry.binary_search(&(x as i32))) {
+        match registry.binary_search(&(x as i32)) {
             Ok(i) => v[i]+=1.0,
             Err(i) => {
                 if i >= registry.len() {

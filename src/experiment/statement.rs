@@ -25,10 +25,10 @@ pub enum ExperimentDirection {
 
 impl ExperimentDirection {
     pub fn server_needs_sender(&self) -> bool {
-        match(self) { ExperimentDirection::ToServerOnly => false, _ => true, }
+        match self { ExperimentDirection::ToServerOnly => false, _ => true, }
     }
     pub fn client_needs_sender(&self) -> bool {
-        match(self) { ExperimentDirection::FromServerOnly => false, _ => true, }
+        match self { ExperimentDirection::FromServerOnly => false, _ => true, }
     }
     pub fn server_needs_receiver(&self) -> bool { self.client_needs_sender() }
     pub fn client_needs_receiver(&self) -> bool { self.server_needs_sender() }
