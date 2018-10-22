@@ -1,9 +1,9 @@
-#![feature(min_const_fn)]
 #![feature(const_slice_len)]
 #![feature(vec_resize_default)]
 #![feature(try_blocks)]
 #![feature(convert_id)]
 #![feature(nll)]
+
 
 #![allow(unused_imports)]
 #![deny(unused_must_use)]
