@@ -351,7 +351,7 @@ pub fn probe(cmd:Cmd) -> Result<()> {
         let mut out = ::std::io::BufWriter::new(out);
         ::serde_json::ser::to_writer(&mut out, &final_result)?;
         use ::std::io::Write;
-        writeln!(out);
+        writeln!(out)?;
     }
 
     Ok(())

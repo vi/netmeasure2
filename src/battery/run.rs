@@ -112,7 +112,7 @@ impl Cmd {
             let mut out = ::std::io::BufWriter::new(out);
             ::serde_json::ser::to_writer(&mut out, &v)?;
             use ::std::io::Write;
-            writeln!(out);
+            writeln!(out)?;
         }
 
         Ok(())
