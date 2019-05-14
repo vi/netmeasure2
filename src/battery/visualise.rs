@@ -1,6 +1,6 @@
 use ::structopt::StructOpt;
 use crate::probe::{CmdImpl,CommunicOpts};
-use crate::experiment::results::{ResultsForStoring,ExperimentResults};
+use crate::experiment::results::{ResultsForStoring,ExperimentResults,CLUSTERS};
 use crate::experiment::statement::{ExperimentDirection,ExperimentInfo,ExperimentReply};
 use ::rand::{RngCore,SeedableRng,Rng};
 use ::rand_xorshift::XorShiftRng;
@@ -44,8 +44,10 @@ pub struct Excerpt {
     pub kbps: f32,
     pub ekbps: f32,
     pub loss: f32,
+    pub badloss: f32,
+    pub badloss_fact : bool,
     pub loss_sendside: bool,
-    pub loss_sendsize_precise : f32,
+    pub loss_sendside_precise : f32,
     pub loss_recoverability: char,
     pub loss_at_the_end: bool,
     pub delay: f32,
@@ -77,15 +79,14 @@ impl Excerpt {
         if self.loss > 0.8 {
             return 0.0
         }
-        loss_karma += self.loss - self.loss_sendsize_precise;
-        loss_karma += 0.5 * self.loss_sendsize_precise;
-        match self.loss_recoverability  {
-            'R' => loss_karma *= 0.25,
-            'r' => loss_karma *= 0.5,
-            '!' => loss_karma *= 1.3,
-            _ => (),
+        loss_karma += self.loss - 0.5*self.loss_sendside_precise;
+        if self.badloss > 0.3*self.loss_sendside_precise {
+            loss_karma += 3.5 * (self.badloss - 0.3*self.loss_sendside_precise);
         }
-        loss_karma *= 10.0;
+        if self.badloss_fact {
+            loss_karma += 0.5;
+        }
+        loss_karma *= 2.0;
         if loss_karma > 9.0 {
             return 0.0;
         };
@@ -130,6 +131,13 @@ impl ExperimentResults {
         let x = self;
         let lm = &x.loss_model;
         let loss = lm.loss_prob;
+        let badloss = loss * (1.0 - lm.loss[0] - 0.5*lm.loss[1] - 0.2*lm.loss[2]);
+        let mut badloss_fact = false;
+        for i in 11..CLUSTERS.len() {
+            if lm.loss[i] > 0.00001 {
+                badloss_fact = true;
+            }
+        }
         let kbps = conditions.kbps() as f32;
         let ekbps = conditions.kbps() as f32 * (1.0 - loss);
         let loss_sendside = if lm.sendside_loss * 2.0 <= lm.loss_prob {
@@ -138,7 +146,11 @@ impl ExperimentResults {
             true
         };
         let loss_recoverability = if lm.loss_prob < 0.01 {
-            ' '
+            if badloss_fact {
+                '+'
+            } else {
+                ' '
+            }
         } else if (lm.loss[0] +
                     lm.loss[1] + 
                     lm.loss[2] + 
@@ -203,7 +215,9 @@ impl ExperimentResults {
             loss_at_the_end,
             delay,
             latchup_marker,
-            loss_sendsize_precise: self.loss_model.sendside_loss,
+            loss_sendside_precise: self.loss_model.sendside_loss,
+            badloss,
+            badloss_fact,
         }
     }
 }
