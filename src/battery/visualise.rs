@@ -209,7 +209,7 @@ impl ExperimentResults {
 }
 
 impl ResultsForStoring {
-    pub fn short_summary(&self) -> String {
+    pub fn short_summary(&self) -> (String, f32) {
         let entry = self;
 
         let mut toserv = format!("");
@@ -231,7 +231,7 @@ impl ResultsForStoring {
         } else {
             " "
         };
-        format!(
+        (format!(
             "{}{:6} | {:5} || {:29} || {:29}|| {:2.0}",
             rtpmim,
             entry.conditions.kbps(),
@@ -239,7 +239,7 @@ impl ResultsForStoring {
             toserv,
             fromserv,
             score,
-        )
+        ), score)
     }
 }
 
@@ -277,14 +277,65 @@ pub fn print_summary(p: &::std::path::Path, verbose: bool, sort_order: SortOrder
         m.insert(sortkey, i);
     }
 
+    struct ScoreEntry{
+        val: f32,
+        weight: f32,
+    };
+    let mut scores : Vec<ScoreEntry> = Vec::with_capacity(40);
+
     println!("  kbps  | pktsz || ekbps_^ | loss_^ | delay_^    || ekbps_v | loss_v | delay_v   || score");
     for (_, &i) in m.iter() {
         let entry = &v[i];
-        println!("{}",entry.short_summary());
+        let (text, quality_score) = entry.short_summary();
+        println!("{}",text);
         if verbose {
             entry.print_to_stdout();
         }
+
+        scores.push(ScoreEntry {
+            val: quality_score,
+            weight: match entry.conditions.kbps() {
+                x if x < 100 => 1.0,
+                x if x < 400 => 0.9,
+                x if x < 1000 => 0.8,
+                x if x < 5000 => 0.7,
+                x if x < 8000 => 0.6,
+                x if x < 12000 => 0.5,
+                x if x < 20_000 => 0.4,
+                x if x < 30_000 => 0.2,
+                _ => 0.1,
+            }
+        })
     }
+
+    let mut availability = 0.0; let mut availability_total = 0.0001;
+    let mut sum = 0.0; let mut weightsum = 0.0;
+    for ScoreEntry{val,mut weight} in scores {
+        if weight >= 0.3 {
+            if val < 8.0 { weight *= 2.0; }
+            else if val < 7.0 { weight *= 2.5; }
+            else if val < 6.0 { weight *= 3.0; }
+            else if val < 5.0 { weight *= 3.5; }
+            else if val < 4.0 { weight *= 4.0; }
+            else if val < 3.0 { weight *= 4.5; }
+            else if val < 2.0 { weight *= 5.0; }
+            else if val < 1.0 { weight *= 6.0; }
+
+            if val >= 6.0 {
+                availability += 1.0;
+            }
+            availability_total += 1.0;
+        }
+        sum += val * weight;
+        weightsum += weight;
+    }
+    let overall_score = sum / weightsum;
+    println!(
+        "Overall network score: {:.1}. Availability: {:.0}%",
+        overall_score,
+        availability / availability_total * 100.0,
+    );
+
     Ok(())
 }
 

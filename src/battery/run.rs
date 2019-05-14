@@ -93,7 +93,7 @@ impl Cmd {
                 }
             }
 
-            eprintln!("{}",v[i].short_summary());
+            eprintln!("{}",v[i].short_summary().0);
             eprintln!("{}%", (i+1) * 100 / n);
         }
 
