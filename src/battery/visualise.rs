@@ -31,11 +31,32 @@ pub struct BatteryShow {
     /// kbps(default), rate (packet rate), size (packet size), time
     #[structopt(long="sort",short="s",default_value="kbps")]
     sort: SortOrder,
+
+    /// Show legend for symbols used in output (not including verose
+    #[structopt(long="legend")]
+    legend: bool,
 }
 
 impl BatteryShow {
     pub fn run(&self) -> Result<()> {
-        print_summary(&self.file, self.verbose, self.sort)
+        print_summary(&self.file, self.verbose, self.sort)?;
+        if self.legend {
+            print!(r#"## Legend: ##
+`R` at the beginning - RTP simulation is on for this test
+Symbols after loss percentage:
+`*` - there is send-side loss - `sentdo` syscall takes too long to finish
+`r`, `R` - loss should be recoverable by FEC
+`!` - loss is bad and non-recoveable
+`+` - although loss percentage is low, it came in non-FEC-recoverable cluster
+`$` - significant loss happened at the end of test and 
+      is not counted towards normal loss per cent
+Symbols after delay value:
+`.` `l` `L` `LL` - "latch-ups" - sudden sharp increases in delay
+`,` `r`, `R` - "recoveries" - quick decreasings of delay
+`lr`, `Lr`, etc. - combination of two above
+"#);
+        }
+        Ok(())
     }
 }
 
