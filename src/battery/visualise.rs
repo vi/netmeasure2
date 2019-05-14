@@ -39,6 +39,116 @@ impl BatteryShow {
     }
 }
 
+// Summary of one half-experiment
+pub struct Excerpt {
+    pub kbps: f32,
+    pub ekbps: f32,
+    pub loss: f32,
+    pub loss_sendside: bool,
+    pub loss_recoverability: char,
+    pub loss_at_the_end: bool,
+    pub delay: f32,
+    pub latchup_marker: &'static str,
+}
+
+impl Excerpt {
+    pub fn format(&self) -> String {
+        format!(
+            "{:7.0} | {:4.1}{}{}{}| {:7.0} {}",
+            self.ekbps,
+            self.loss*100.0,
+            if self.loss_sendside { ' ' } else { '*' },
+            self.loss_recoverability,
+            if self.loss_at_the_end { '$' } else {' '},
+            self.delay,
+            self.latchup_marker,
+        )
+    }
+}
+
+impl ExperimentResults {
+    /// Return short summarized results
+    pub fn get_exceprt(&self, conditions: &ExperimentInfo) -> Excerpt {
+        let x = self;
+        let lm = &x.loss_model;
+        let loss = lm.loss_prob;
+        let kbps = conditions.kbps() as f32;
+        let ekbps = conditions.kbps() as f32 * (1.0 - loss);
+        let loss_sendside = if lm.sendside_loss * 2.0 <= lm.loss_prob {
+            false
+        } else {
+            true
+        };
+        let loss_recoverability = if lm.loss_prob < 0.01 {
+            ' '
+        } else if (lm.loss[0] +
+                    lm.loss[1] + 
+                    lm.loss[2] + 
+                    lm.loss[3] + 
+                    lm.loss[4] + 
+                    lm.loss[5] + 
+                    lm.loss[6] + 
+                    lm.loss[7] + 
+                    lm.loss[8] + 
+                    lm.loss[9] ) * lm.loss_prob >= 0.3 {
+            '!'
+        } else if lm.loss[0] >= 0.8 {
+            'R'
+        } else if lm.loss[0]+
+                    lm.loss[1]+
+                    lm.loss[2] >= 0.7 {
+            'r'
+        } else {
+            ' '
+        };
+        let loss_at_the_end = if lm.end_lp > 100 {
+            true
+        } else {
+            false
+        };
+
+        let delay = x.delay_model.mean_delay_ms;
+        let latchup_marker = match (
+                (x.latchiness()*1000.0) as i32,
+                (x.delay_abrupt_decreaseness()*1000.0) as i32,
+            ) {
+            (-1000 ... 200, -1000...200) => "  ",
+            (200 ... 2_000, -1000...200) => ". ",
+            (2_000...5_000, -1000...200) => "l ",
+            (5_000...10_000,-1000...200) => "L ",
+            (10_000 ... 100000000, -100...2000) => "LL",
+
+            (-1000 ... 200, 200...2000) => " ,",
+            (200 ... 2_000, 200...2000) => ".,",
+            (2_000...5_000, 200...2000) => "l,",
+            (5_000...10_000,200...2000) => "L,",
+
+            (-1000 ... 200, 2000...5000) => " r",
+            (200 ... 2_000, 2000...5000) => ".r",
+            (2_000...5_000, 2000...5000) => "lr",
+            (5_000...10_000,2000...5000) => "Lr",
+
+            (-1000 ... 200, 5000...10000) => " R",
+            (200 ... 2_000, 5000...10000000) => ".R",
+            (2_000...5_000, 5000...10000000) => "lR",
+            (5_000...10_00000000,5000...10000000) => "LR",
+            (-1000...2000,5000...10000000) => "RR",
+
+            _ => "??",
+        };
+        Excerpt {
+            kbps,
+            ekbps,
+            loss,
+            loss_sendside,
+            loss_recoverability,
+            loss_at_the_end,
+            delay,
+            latchup_marker,
+        }
+    }
+}
+
 impl ResultsForStoring {
     pub fn short_summary(&self) -> String {
         let entry = self;
@@ -46,80 +156,7 @@ impl ResultsForStoring {
         let mut toserv = format!("");
         let mut fromserv = format!("");
         let q = |x : &ExperimentResults| {
-            let lm = &x.loss_model;
-            let ekbps = entry.conditions.kbps() as f32 * (1.0 - lm.loss_prob);
-            let loss_sendside = if lm.sendside_loss * 2.0 <= lm.loss_prob {
-                " "
-            } else {
-                "*"
-            };
-            let loss_recoverability = if lm.loss_prob < 0.01 {
-                " "
-            } else if (lm.loss[0] +
-                       lm.loss[1] + 
-                       lm.loss[2] + 
-                       lm.loss[3] + 
-                       lm.loss[4] + 
-                       lm.loss[5] + 
-                       lm.loss[6] + 
-                       lm.loss[7] + 
-                       lm.loss[8] + 
-                       lm.loss[9] ) * lm.loss_prob >= 0.3 {
-                "!"
-            } else if lm.loss[0] >= 0.8 {
-                "R"
-            } else if lm.loss[0]+
-                      lm.loss[1]+
-                      lm.loss[2] >= 0.7 {
-                "r"
-            } else {
-                " "
-            };
-            let lost_attheend = if lm.end_lp > 100 {
-                "$"
-            } else {
-                " "
-            };
-
-
-            let latchup_marker = match (
-                    (x.latchiness()*1000.0) as i32,
-                    (x.delay_abrupt_decreaseness()*1000.0) as i32,
-             ) {
-                (-1000 ... 200, -1000...200) => "  ",
-                (200 ... 2_000, -1000...200) => ". ",
-                (2_000...5_000, -1000...200) => "l ",
-                (5_000...10_000,-1000...200) => "L ",
-                (10_000 ... 100000000, -100...2000) => "LL",
-
-                (-1000 ... 200, 200...2000) => " ,",
-                (200 ... 2_000, 200...2000) => ".,",
-                (2_000...5_000, 200...2000) => "l,",
-                (5_000...10_000,200...2000) => "L,",
-
-                (-1000 ... 200, 2000...5000) => " r",
-                (200 ... 2_000, 2000...5000) => ".r",
-                (2_000...5_000, 2000...5000) => "lr",
-                (5_000...10_000,2000...5000) => "Lr",
-
-                (-1000 ... 200, 5000...10000) => " R",
-                (200 ... 2_000, 5000...10000000) => ".R",
-                (2_000...5_000, 5000...10000000) => "lR",
-                (5_000...10_00000000,5000...10000000) => "LR",
-                (-1000...2000,5000...10000000) => "RR",
-
-                _ => "??",
-            };
-            format!(
-                "{:7.0} | {:4.1}{}{}{}| {:7.0} {}",
-                ekbps,
-                lm.loss_prob*100.0,
-                loss_sendside,
-                loss_recoverability,
-                lost_attheend,
-                x.delay_model.mean_delay_ms,
-                latchup_marker,
-            )
+            x.get_exceprt(&entry.conditions).format()
         };
         if let Some(x) = entry.to_server.as_ref() {
             toserv = q(x);
