@@ -1,7 +1,7 @@
 use crate::Result;
 use ::std::rc::Rc;
 
-/// Hard-coded values of delay difference with previous packet's delay. Must be sorted.
+// Hard-coded values of delay difference with previous packet's delay. Must be sorted.
 counted_array!(
 pub const DELAY_DELTAS: [i32; _] = [
 -1000, -500, -300, -200, -100, -90, -80, -70, -60, -50, -40, -30, -20, -10, -5,
@@ -12,7 +12,7 @@ pub const DELAY_DELTAS: [i32; _] = [
 pub const ZERO_DELTA_IDX : usize = 15;
 const_assert!(ZERO_DELTA_IDX_correct; DELAY_DELTAS[ZERO_DELTA_IDX] == 0);
 
-/// Hard-coded delays values. Must be sorted.
+// Hard-coded delays values. Must be sorted.
 counted_array!(
 pub const DELAY_VALUES: [i32; _] = [
     0, 10, 20, 40, 70, 100, 150, 200, 250, 300, 350, 400, 500, 600, 700, 800, 900, 1000, 1200, 1400, 1600, 1800,
@@ -43,7 +43,7 @@ pub struct DelayModel {
     pub mean_delay_ms: f32,
 }
 
-/// Hard-coded loss (or non-loss) cluster ranges. Must be sorted.
+// Hard-coded loss (or non-loss) cluster ranges. Must be sorted.
 counted_array!(
 pub const CLUSTERS: [i32; _] = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 120,
