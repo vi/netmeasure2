@@ -19,6 +19,7 @@ extern crate strum_macros;
 extern crate enum_unitary;
 
 extern crate rand;
+extern crate rand_xorshift;
 
 #[macro_use]
 extern crate counted_array;
@@ -31,9 +32,6 @@ extern crate serde_derive;
 
 extern crate serde_cbor;
 extern crate serde_json;
-
-#[macro_use]
-extern crate rand_derive;
 
 extern crate byteorder;
 

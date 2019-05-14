@@ -197,7 +197,7 @@ pub fn serve(cmd:Cmd) -> Result<()> {
     println!("Listening {}", cmd.sa);
     let mut buf = [0; 4096];
     let mut st = State::Idle(None, None);
-    let mut rnd = ::rand::EntropyRng::new();
+    let mut rnd = ::rand::rngs::EntropyRng::new();
 
     loop {
         let mut prev_cla = None;

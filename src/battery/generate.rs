@@ -2,7 +2,9 @@ use ::structopt::StructOpt;
 use crate::probe::{CmdImpl,CommunicOpts};
 use crate::experiment::results::{ResultsForStoring,ExperimentResults};
 use crate::experiment::statement::{ExperimentDirection,ExperimentInfo,ExperimentReply};
-use ::rand::{XorShiftRng,RngCore,SeedableRng,Rng};
+use ::rand::{RngCore,SeedableRng,Rng};
+use ::rand::seq::SliceRandom;
+use ::rand_xorshift::XorShiftRng;
 use crate::Result;
 use super::Battery;
 
@@ -188,7 +190,7 @@ impl Battery {
 
             v.push(e);
         }
-        r.shuffle(&mut v[..]);
+        v[..].shuffle(&mut r);
 
         Battery(v)
     }
