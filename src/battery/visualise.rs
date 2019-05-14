@@ -45,6 +45,7 @@ pub struct Excerpt {
     pub ekbps: f32,
     pub loss: f32,
     pub loss_sendside: bool,
+    pub loss_sendsize_precise : f32,
     pub loss_recoverability: char,
     pub loss_at_the_end: bool,
     pub delay: f32,
@@ -53,16 +54,73 @@ pub struct Excerpt {
 
 impl Excerpt {
     pub fn format(&self) -> String {
+        let loss = if self.loss > 0.999 {
+            "100!".to_string()
+        } else {
+            format!("{:4.1}",self.loss*100.0)
+        };
         format!(
-            "{:7.0} | {:4.1}{}{}{}| {:7.0} {}",
+            "{:7.0} | {}{}{}{}| {:7.0} {}",
             self.ekbps,
-            self.loss*100.0,
-            if self.loss_sendside { ' ' } else { '*' },
+            loss,
+            if self.loss_sendside { '*' } else { ' ' },
             self.loss_recoverability,
             if self.loss_at_the_end { '$' } else {' '},
             self.delay,
             self.latchup_marker,
         )
+    }
+
+    /// From 0.0 to 10.0
+    pub fn quality_score(&self) -> f32 {
+        let mut loss_karma = 0.0;
+        if self.loss > 0.8 {
+            return 0.0
+        }
+        loss_karma += self.loss - self.loss_sendsize_precise;
+        loss_karma += 0.5 * self.loss_sendsize_precise;
+        match self.loss_recoverability  {
+            'R' => loss_karma *= 0.25,
+            'r' => loss_karma *= 0.5,
+            '!' => loss_karma *= 1.3,
+            _ => (),
+        }
+        loss_karma *= 10.0;
+        if loss_karma > 9.0 {
+            return 0.0;
+        };
+        let mut delay_karma = match self.delay {
+            x if x > 5000.0 => 10.0,
+            x if x > 3000.0 => 6.0 + (10.0 - 6.0) * (x - 3000.0) / (5000.0-3000.0),
+            x if x > 1000.0 => 4.0 + (6.0 - 4.0) * (x - 1000.0) / (3000.0-1000.0),
+            x if x > 500.0 => 2.0 + (4.0 - 2.0) * (x - 500.0) / (1000.0-500.0),
+            x => x / 500.0 * 2.0,
+        };
+        match self.latchup_marker {
+            ". " => delay_karma += 0.4,
+            ".," => delay_karma += 0.2,
+            "l " => delay_karma += 1.0,
+            "l," => delay_karma += 0.8,
+            "lr" => delay_karma += 0.6,
+            "lR" => delay_karma += 0.5,
+            "L " => delay_karma += 2.0,
+            "L," => delay_karma += 1.8,
+            "Lr" => delay_karma += 1.5,
+            "LR" => delay_karma += 1.2,
+            "LL" => delay_karma += 2.5,
+            _ => (),
+        };
+        if delay_karma > 10.0 {
+            delay_karma = 10.0;
+        };
+        //println!("loss_karma={} delay_karma={}", loss_karma, delay_karma);
+        let worst = delay_karma.max(loss_karma);
+        let avg = (delay_karma + loss_karma*2.0) / 3.0;
+        let mut adj = (avg + worst) / 2.0;
+        if adj > 4.0 {
+            adj = 4.0  + (adj - 4.0) / 6.0;
+        }
+        10.0 - 2.0 * adj
     }
 }
 
@@ -145,6 +203,7 @@ impl ExperimentResults {
             loss_at_the_end,
             delay,
             latchup_marker,
+            loss_sendsize_precise: self.loss_model.sendside_loss,
         }
     }
 }
@@ -155,8 +214,11 @@ impl ResultsForStoring {
 
         let mut toserv = format!("");
         let mut fromserv = format!("");
-        let q = |x : &ExperimentResults| {
-            x.get_exceprt(&entry.conditions).format()
+        let mut score = 10.0f32;
+        let mut q = |x : &ExperimentResults| {
+            let e = x.get_exceprt(&entry.conditions);
+            score = score.min(e.quality_score());
+            e.format()
         };
         if let Some(x) = entry.to_server.as_ref() {
             toserv = q(x);
@@ -170,12 +232,13 @@ impl ResultsForStoring {
             " "
         };
         format!(
-            "{}{:6} | {:5} || {:29} || {:29}",
+            "{}{:6} | {:5} || {:29} || {:29}|| {:2.0}",
             rtpmim,
             entry.conditions.kbps(),
             entry.conditions.packetsize,
             toserv,
             fromserv,
+            score,
         )
     }
 }
@@ -214,7 +277,7 @@ pub fn print_summary(p: &::std::path::Path, verbose: bool, sort_order: SortOrder
         m.insert(sortkey, i);
     }
 
-    println!("  kbps  | pktsz || ekbps_^ | loss_^ | delay_^    || ekbps_v | loss_v | delay_v  ");
+    println!("  kbps  | pktsz || ekbps_^ | loss_^ | delay_^    || ekbps_v | loss_v | delay_v   || score");
     for (_, &i) in m.iter() {
         let entry = &v[i];
         println!("{}",entry.short_summary());
