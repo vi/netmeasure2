@@ -1,21 +1,18 @@
-use ::structopt::StructOpt;
-use crate::probe::{CmdImpl,CommunicOpts};
-use crate::experiment::results::{ResultsForStoring,ExperimentResults};
-use crate::experiment::statement::{ExperimentDirection,ExperimentInfo,ExperimentReply};
-use ::rand::{RngCore,SeedableRng,Rng};
-use ::rand::seq::SliceRandom;
-use ::rand_xorshift::XorShiftRng;
-use crate::Result;
 use super::Battery;
-
-
+use crate::experiment::results::{ExperimentResults, ResultsForStoring};
+use crate::experiment::statement::{ExperimentDirection, ExperimentInfo, ExperimentReply};
+use crate::probe::{CmdImpl, CommunicOpts};
+use crate::Result;
+use ::rand::seq::SliceRandom;
+use ::rand::{Rng, RngCore, SeedableRng};
+use ::rand_xorshift::XorShiftRng;
+use ::structopt::StructOpt;
 
 fn getrand() -> XorShiftRng {
-    let seed = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16];
-    let r : XorShiftRng = SeedableRng::from_seed(seed);
+    let seed = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+    let r: XorShiftRng = SeedableRng::from_seed(seed);
     r
 }
-
 
 impl ::rand::distributions::Distribution<ExperimentDirection> for ::rand::distributions::Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> ExperimentDirection {
@@ -40,9 +37,9 @@ impl Battery {
 
         while v.len() < 50 {
             let packetsize = if r.gen_bool(0.5) {
-                r.gen_range(100,1537)
+                r.gen_range(100, 1537)
             } else {
-                r.gen_range(32,100)
+                r.gen_range(32, 100)
             };
             let direction = r.gen();
             let packetdelay_us = if r.gen_bool(0.4) {
@@ -52,7 +49,7 @@ impl Battery {
             };
             let rtpmimic = r.gen();
             let mut totalpackets = (5_000_000 / packetdelay_us) as u32;
-            if totalpackets < 1000 &&  r.gen_bool(0.7) { 
+            if totalpackets < 1000 && r.gen_bool(0.7) {
                 totalpackets = 1000
             };
             if totalpackets < 200 {
@@ -112,7 +109,6 @@ impl Battery {
         Battery(v)
     }
 
-
     pub fn generate_bb() -> Self {
         let mut v = vec![];
 
@@ -125,9 +121,9 @@ impl Battery {
 
         while v.len() < 50 {
             let packetsize = if r.gen_bool(0.5) {
-                r.gen_range(256,1537)
+                r.gen_range(256, 1537)
             } else {
-                r.gen_range(80,256)
+                r.gen_range(80, 256)
             };
             let direction = r.gen();
             let packetdelay_us = if r.gen_bool(0.5) {
@@ -137,7 +133,7 @@ impl Battery {
             };
             let rtpmimic = r.gen();
             let mut totalpackets = (5_000_000 / packetdelay_us) as u32;
-            if totalpackets < 5000 &&  r.gen_bool(0.7) { 
+            if totalpackets < 5000 && r.gen_bool(0.7) {
                 totalpackets = 5000
             };
             if totalpackets < 1000 {

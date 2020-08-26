@@ -1,12 +1,11 @@
-use ::structopt::StructOpt;
-use crate::Result;
-use ::std::net::{SocketAddr,UdpSocket,SocketAddrV4,SocketAddrV6,Ipv4Addr,Ipv6Addr};
-use ::std::time::{Duration,Instant};
+use crate::experiment::results::{ExperimentResults, ResultsForStoring};
+use crate::experiment::statement::{ExperimentDirection, ExperimentInfo, ExperimentReply};
 use crate::experiment::SmallishDuration;
-use crate::experiment::statement::{ExperimentInfo,ExperimentReply,ExperimentDirection};
-use crate::experiment::results::{ExperimentResults,ResultsForStoring};
+use crate::Result;
+use ::std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, UdpSocket};
 use ::std::rc::Rc;
-
+use ::std::time::{Duration, Instant};
+use ::structopt::StructOpt;
 
 #[derive(Debug, StructOpt, Clone)]
 pub struct CommunicOpts {
@@ -14,17 +13,17 @@ pub struct CommunicOpts {
     pub server: SocketAddr,
 
     /// Use IPv6
-    #[structopt(short="6")]
+    #[structopt(short = "6")]
     pub ipv6: bool,
 
-    #[structopt(long="source-port", default_value="0")]
+    #[structopt(long = "source-port", default_value = "0")]
     pub source_port: u16,
 
-    #[structopt(long="save-raw-stats",short="R",parse(from_os_str))]
+    #[structopt(long = "save-raw-stats", short = "R", parse(from_os_str))]
     save_raw_stats: Option<::std::path::PathBuf>,
 
     /// Maximum number of seconds to wait for results
-    #[structopt(long="max-wait-for-results", default_value="15")]
+    #[structopt(long = "max-wait-for-results", default_value = "15")]
     max_wait_for_results: u64,
 }
 
@@ -34,7 +33,7 @@ pub struct CmdImpl {
     pub experiment: ExperimentInfo,
 
     #[structopt(flatten)]
-    pub co : CommunicOpts,
+    pub co: CommunicOpts,
 }
 
 #[derive(Debug, StructOpt)]
@@ -42,18 +41,23 @@ pub struct Cmd {
     #[structopt(flatten)]
     pub inner: CmdImpl,
 
-    #[structopt(long="output", short="o", parse(from_os_str))]
+    #[structopt(long = "output", short = "o", parse(from_os_str))]
     pub output: Option<::std::path::PathBuf>,
 
     /// Format results nicely to stdout
     /// (maybe in addition to outputing JSON to `-o` file)
-    #[structopt(short="S")]
+    #[structopt(short = "S")]
     visualise: bool,
 }
 
-pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
+pub fn probe_impl(cmd: CmdImpl) -> Result<ResultsForStoring> {
     let udp = UdpSocket::bind(if cmd.co.ipv6 {
-        SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, cmd.co.source_port, 0, 0))
+        SocketAddr::V6(SocketAddrV6::new(
+            Ipv6Addr::UNSPECIFIED,
+            cmd.co.source_port,
+            0,
+            0,
+        ))
     } else {
         SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, cmd.co.source_port))
     })?;
@@ -67,9 +71,10 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
 
     let mut buf = [0; 1536];
 
-    let _s2c : crate::ServerToClient;
+    let _s2c: crate::ServerToClient;
 
-    let start = Instant::now() + Duration::from_micros(c2s.experiment.pending_start_in_microseconds as u64);
+    let start =
+        Instant::now() + Duration::from_micros(c2s.experiment.pending_start_in_microseconds as u64);
     let end = start + c2s.experiment.duration() + Duration::from_secs(1);
     let mut end2 = end;
 
@@ -89,17 +94,20 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
         c2s.experiment.pending_start_in_microseconds = ttg.as_us();
         eprint!(".");
         //eprintln!("{:?}", c2s);
-        c2s.seqn_for_rtt+=1;
+        c2s.seqn_for_rtt += 1;
         ts_for_rtt_send.insert(c2s.seqn_for_rtt, Instant::now());
-        udp.send_to(::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice(), cmd.co.server)?;
+        udp.send_to(
+            ::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice(),
+            cmd.co.server,
+        )?;
         match udp.recv_from(&mut buf) {
-            Ok((ret,from)) => {
+            Ok((ret, from)) => {
                 if from != cmd.co.server {
                     eprintln!("Foreign packet");
                     continue;
                 }
 
-                let s2c : crate::ServerToClient = ::serde_cbor::from_slice(&buf[0..ret])?;
+                let s2c: crate::ServerToClient = ::serde_cbor::from_slice(&buf[0..ret])?;
 
                 if s2c.api_version != crate::API_VERSION {
                     bail!("Wrong API version");
@@ -108,35 +116,41 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
 
                 match s2c.reply {
                     ExperimentReply::Busy => bail!("Server busy"),
-                    ExperimentReply::Accepted{session_id,remaining_warmup_time_us} => {
+                    ExperimentReply::Accepted {
+                        session_id,
+                        remaining_warmup_time_us,
+                    } => {
                         assert!(session_id == c2s.experiment.session_id);
                         experiment_start_for_receiver =
                             Instant::now() + Duration::from_micros(remaining_warmup_time_us as u64);
                         break;
-                    },
-                    ExperimentReply::IsOngoing{session_id,elapsed_time_us} => {
+                    }
+                    ExperimentReply::IsOngoing {
+                        session_id,
+                        elapsed_time_us,
+                    } => {
                         assert!(session_id == c2s.experiment.session_id);
                         experiment_start_for_receiver =
                             Instant::now() - Duration::from_micros(elapsed_time_us as u64);
                         break;
-                    },
-                    ExperimentReply::ResourceLimits{msg} => {
+                    }
+                    ExperimentReply::ResourceLimits { msg } => {
                         eprintln!("\nResource limits: {}", msg);
                         bail!("Parameters out of range");
-                    },
-                    ExperimentReply::HereAreResults{..} => bail!("Results not expected now"),
-                    ExperimentReply::RetryWithASessionId{session_id} => {
+                    }
+                    ExperimentReply::HereAreResults { .. } => bail!("Results not expected now"),
+                    ExperimentReply::RetryWithASessionId { session_id } => {
                         c2s.experiment.session_id = session_id;
-                    },
-                    ExperimentReply::Failed{msg} => {
-                        eprintln!("{}",msg);
+                    }
+                    ExperimentReply::Failed { msg } => {
+                        eprintln!("{}", msg);
                         bail!("Fail reply from server");
-                    },
+                    }
                 };
-            },
+            }
             Err(ref e) if e.kind() == ::std::io::ErrorKind::WouldBlock => {
                 continue;
-            },
+            }
             Err(e) => Err(e)?,
         }
     }
@@ -149,9 +163,11 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
                 num_packets: c2s.experiment.totalpackets,
                 session_id: c2s.experiment.session_id,
                 experiment_start: experiment_start_for_receiver,
-            }
+            },
         ))
-    } else { None };
+    } else {
+        None
+    };
 
     let snd = if c2s.experiment.direction.client_needs_sender() {
         let udp2 = udp.try_clone()?;
@@ -164,16 +180,16 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
             experiment_start: start,
             session_id: c2s.experiment.session_id,
         };
-        Some(::std::thread::spawn(move || {
-            sender.run(udp2, serv2)
-        }))
-    } else { None };
+        Some(::std::thread::spawn(move || sender.run(udp2, serv2)))
+    } else {
+        None
+    };
 
     udp.set_read_timeout(Some(Duration::from_secs(1)))?;
 
     let mut request_results = false;
 
-    let mut results_ : Option<Rc<ExperimentResults>>;
+    let mut results_: Option<Rc<ExperimentResults>>;
     let send_lost_: Option<u32>;
 
     loop {
@@ -202,7 +218,7 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
         }
 
         match udp.recv_from(&mut buf) {
-            Ok((ret,from)) => {
+            Ok((ret, from)) => {
                 let msg = &buf[0..ret];
 
                 if from != cmd.co.server {
@@ -229,13 +245,12 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
                     continue;
                 }
 
-
                 if &msg[0..3] != b"\xd9\xd9\xf7" {
                     eprintln!("Unexpected packet");
                     continue;
                 }
 
-                let s2c : crate::ServerToClient = ::serde_cbor::from_slice(msg)?;
+                let s2c: crate::ServerToClient = ::serde_cbor::from_slice(msg)?;
 
                 if s2c.api_version != crate::API_VERSION {
                     bail!("Wrong API version ; 2");
@@ -244,44 +259,56 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
 
                 match s2c.reply {
                     ExperimentReply::Busy => bail!("Server busy 2"),
-                    ExperimentReply::Accepted{session_id: _,remaining_warmup_time_us: _} => {
-                        continue;  
-                    },
-                    ExperimentReply::IsOngoing{session_id: _,elapsed_time_us: _} => {
+                    ExperimentReply::Accepted {
+                        session_id: _,
+                        remaining_warmup_time_us: _,
+                    } => {
                         continue;
-                    },
-                    ExperimentReply::ResourceLimits{msg} => {
+                    }
+                    ExperimentReply::IsOngoing {
+                        session_id: _,
+                        elapsed_time_us: _,
+                    } => {
+                        continue;
+                    }
+                    ExperimentReply::ResourceLimits { msg } => {
                         eprintln!("\nResource limits: {}", msg);
                         bail!("Parameters out of range 2");
-                    },
-                    ExperimentReply::HereAreResults{stats,send_lost} => {
+                    }
+                    ExperimentReply::HereAreResults { stats, send_lost } => {
                         if let Some(ref x) = stats {
-                            ensure!(x.session_id == c2s.experiment.session_id,
+                            ensure!(
+                                x.session_id == c2s.experiment.session_id,
                                 "wrong session id in results"
                             );
                         }
                         send_lost_ = send_lost;
                         results_ = stats;
                         break;
-                    },
-                    ExperimentReply::RetryWithASessionId{session_id: _} => bail!("Unexpected retryWSId"),
-                    ExperimentReply::Failed{msg} => {
-                        eprintln!("{}",msg);
+                    }
+                    ExperimentReply::RetryWithASessionId { session_id: _ } => {
+                        bail!("Unexpected retryWSId")
+                    }
+                    ExperimentReply::Failed { msg } => {
+                        eprintln!("{}", msg);
                         bail!("Fail reply from server 2");
-                    },
+                    }
                 };
-            },
+            }
             Err(ref e) if e.kind() == ::std::io::ErrorKind::WouldBlock => {
                 if request_results {
-                    c2s.seqn_for_rtt+=1;
+                    c2s.seqn_for_rtt += 1;
                     ts_for_rtt_send.insert(c2s.seqn_for_rtt, Instant::now());
-                    udp.send_to(::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice(), cmd.co.server)?;
+                    udp.send_to(
+                        ::serde_cbor::ser::to_vec_sd(&c2s)?.as_slice(),
+                        cmd.co.server,
+                    )?;
                 }
                 if let Some(ref mut rcv) = rcv {
                     eprintln!("(no packets getting received now)");
                     rcv.no_packet_received();
                 }
-            },
+            }
             Err(e) => Err(e)?,
         }
     }
@@ -290,11 +317,13 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
     let mut my_send_lost = None;
     if let Some(snd) = snd {
         match snd.join() {
-            Err(_e) => { bail!("sender thread panicked"); },
+            Err(_e) => {
+                bail!("sender thread panicked");
+            }
             Ok(x) => {
                 let lost = x?;
                 my_send_lost = Some(lost);
-            },
+            }
         }
     }
 
@@ -313,11 +342,11 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
     }
     let rtt_us;
     {
-        let mut count=0;
+        let mut count = 0;
         let mut dur = Duration::from_secs(0);
-        for (sq,ts) in ts_for_rtt_recv {
+        for (sq, ts) in ts_for_rtt_recv {
             dur += ts - ts_for_rtt_send[&sq];
-            count+=1;
+            count += 1;
         }
         rtt_us = dur.as_us() / count;
     }
@@ -331,14 +360,13 @@ pub fn probe_impl(cmd:CmdImpl) -> Result<ResultsForStoring> {
     Ok(final_result)
 }
 
-
-pub fn probe(cmd:Cmd) -> Result<()> {
+pub fn probe(cmd: Cmd) -> Result<()> {
     let final_result = probe_impl(cmd.inner)?;
 
     if cmd.visualise && cmd.output.is_none() {
         final_result.print_to_stdout();
     } else {
-        let out : Box<dyn(::std::io::Write)>;
+        let out: Box<dyn (::std::io::Write)>;
         if let Some(pb) = cmd.output {
             let f = ::std::fs::File::create(pb)?;
             out = Box::new(f);

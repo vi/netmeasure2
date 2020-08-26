@@ -5,7 +5,10 @@ macro_rules! miniserialize_for_display {
     ($t:ty) => {
         impl miniserde::Serialize for $t {
             fn begin(&self) -> $crate::miniserde::ser::Fragment {
-                $crate::miniserde::ser::Fragment::Str(::std::borrow::Cow::Owned(format!("{}",self)))
+                $crate::miniserde::ser::Fragment::Str(::std::borrow::Cow::Owned(format!(
+                    "{}",
+                    self
+                )))
             }
         }
     };
@@ -22,7 +25,7 @@ macro_rules! minideserialize_for_fromstr {
                             Ok(x) => {
                                 self.out = Some(x);
                                 Ok(())
-                            },
+                            }
                             Err(_) => Err(miniserde::Error),
                         }
                     }

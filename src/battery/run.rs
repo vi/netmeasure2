@@ -1,44 +1,41 @@
-use ::structopt::StructOpt;
-use crate::probe::{CmdImpl,CommunicOpts};
-use crate::experiment::results::{ResultsForStoring,ExperimentResults};
-use crate::experiment::statement::{ExperimentDirection,ExperimentInfo,ExperimentReply};
-use ::rand::{RngCore,SeedableRng,Rng};
-use ::rand_xorshift::XorShiftRng;
-use crate::Result;
 use super::Battery;
+use crate::experiment::results::{ExperimentResults, ResultsForStoring};
+use crate::experiment::statement::{ExperimentDirection, ExperimentInfo, ExperimentReply};
+use crate::probe::{CmdImpl, CommunicOpts};
+use crate::Result;
+use ::rand::{Rng, RngCore, SeedableRng};
+use ::rand_xorshift::XorShiftRng;
+use ::structopt::StructOpt;
 
-
-
-#[derive(Debug,StructOpt)]
+#[derive(Debug, StructOpt)]
 pub struct Cmd {
     #[structopt(flatten)]
-    co : CommunicOpts,
+    co: CommunicOpts,
 
-    #[structopt(long="output", short="o", parse(from_os_str))]
+    #[structopt(long = "output", short = "o", parse(from_os_str))]
     pub output: Option<::std::path::PathBuf>,
 
     /// Format results nicely to stdout
     /// (maybe in addition to outputing JSON to `-o` file)
-    #[structopt(short="S")]
+    #[structopt(short = "S")]
     visualise: bool,
 
     /// Do a big, half-a-gigabyte test for more broadband networks
-    #[structopt(long="big")]
+    #[structopt(long = "big")]
     big: bool,
-    
+
     /// Do a normal test. This flag is no-op.
-    #[structopt(long="small")]
+    #[structopt(long = "small")]
     small: bool,
 
     /// Maximum number of retries if non-first experiment is failed
-    #[structopt(long="max-retries", default_value="4")]
+    #[structopt(long = "max-retries", default_value = "4")]
     max_retries: usize,
-    
+
     /// Wait this number of seconds after single experiment failure before retrying
-    #[structopt(long="wait-before-retry", default_value="30")]
+    #[structopt(long = "wait-before-retry", default_value = "30")]
     wait_before_retry: u64,
 }
-
 
 impl Cmd {
     pub fn run(self) -> Result<()> {
@@ -54,9 +51,8 @@ impl Cmd {
         let n = battery.0.len();
         let co = cmd.co;
 
-
         eprintln!("0%");
-        for (i,experiment) in battery.0.into_iter().enumerate() {
+        for (i, experiment) in battery.0.into_iter().enumerate() {
             use crate::probe::probe_impl;
 
             let mut retries = 0;
@@ -71,15 +67,17 @@ impl Cmd {
                     Ok(r) => {
                         v.push(r);
                         break;
-                    },
+                    }
                     Err(e) => {
                         eprintln!("Error: {}", e);
                         if i < 3 {
-                            if format!("{}",e).contains("busy") {
+                            if format!("{}", e).contains("busy") {
                                 bail!("Server is probably busy with another session");
                             }
                         }
-                        if i == 0 { bail!("First experiment failed") }
+                        if i == 0 {
+                            bail!("First experiment failed")
+                        }
                         retries += 1;
                         if retries == cmd.max_retries {
                             bail!("Too many fails in a row, exiting");
@@ -89,18 +87,18 @@ impl Cmd {
                             ));
                             continue;
                         }
-                    },
+                    }
                 }
             }
 
-            eprintln!("{}",v[i].short_summary().0);
-            eprintln!("{}%", (i+1) * 100 / n);
+            eprintln!("{}", v[i].short_summary().0);
+            eprintln!("{}%", (i + 1) * 100 / n);
         }
 
         if cmd.visualise && cmd.output.is_none() {
             println!("Visualise not implemented");
         } else {
-            let out : Box<dyn(::std::io::Write)>;
+            let out: Box<dyn (::std::io::Write)>;
             if let Some(pb) = cmd.output {
                 let f = ::std::fs::File::create(pb)?;
                 out = Box::new(f);

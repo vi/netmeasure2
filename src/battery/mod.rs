@@ -1,13 +1,12 @@
 //! A battery of experiments
 
-use ::structopt::StructOpt;
-use crate::experiment::results::{ResultsForStoring,ExperimentResults};
-use crate::experiment::statement::{ExperimentDirection,ExperimentInfo,ExperimentReply};
+use crate::experiment::results::{ExperimentResults, ResultsForStoring};
+use crate::experiment::statement::{ExperimentDirection, ExperimentInfo, ExperimentReply};
 use crate::Result;
+use ::structopt::StructOpt;
 
-
-pub mod run;
 pub mod generate;
+pub mod run;
 pub mod visualise;
 
 /// A battery of multiple probes

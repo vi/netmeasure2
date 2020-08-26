@@ -1,13 +1,13 @@
-use ::std::time::{Instant,Duration};
+use ::std::time::{Duration, Instant};
 
-use super::results::{ExperimentResults,DelayModel,LossModel};
+use super::results::{DelayModel, ExperimentResults, LossModel};
 use super::statement::MINPACKETSIZE;
 
-use ::byteorder::{BE,ByteOrder};
+use ::byteorder::{ByteOrder, BE};
 
 use crate::experiment::SmallishDuration;
 
-#[derive(Copy,Clone,Default,Debug,Serialize,Deserialize)]
+#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Info {
     pub seqn: u32,
     pub st_us: u32,
@@ -31,16 +31,19 @@ pub struct PacketReceiverParams {
 impl PacketReceiver {
     pub fn recv(&mut self, pkt: &[u8]) {
         assert!(pkt.len() >= MINPACKETSIZE);
-        if self.ctr >= self.v.len() { return }
+        if self.ctr >= self.v.len() {
+            return;
+        }
         let seqn = BE::read_u32(&pkt[12..16]);
         let st_us = BE::read_u32(&pkt[16..20]);
 
-
         let recv_ts = Instant::now();
-        if self.start > recv_ts { self.start = recv_ts}
+        if self.start > recv_ts {
+            self.start = recv_ts
+        }
         let rt_us = (recv_ts - self.start).as_us();
 
-        self.v[self.ctr]=Info{rt_us, st_us, seqn};
+        self.v[self.ctr] = Info { rt_us, st_us, seqn };
         self.ctr += 1;
 
         self.cur_del_us = 0.8 * self.cur_del_us + 0.2 * (rt_us as f64 - st_us as f64);
@@ -61,7 +64,7 @@ impl PacketReceiver {
         if self.ctr == 0 {
             0
         } else {
-            self.v[self.ctr-1].seqn
+            self.v[self.ctr - 1].seqn
         }
     }
 
@@ -85,24 +88,29 @@ impl PacketReceiver {
     #[allow(unused_parens)]
     pub fn save_raw_data(&self, dir: &::std::path::Path) {
         if let Err(e) = (try {
-            let p = dir.join(format!("{}.dat",self.session_id));
+            let p = dir.join(format!("{}.dat", self.session_id));
             let f = ::std::fs::File::create(p)?;
             let mut f = ::std::io::BufWriter::new(f);
-            
+
             ::bincode::serialize_into(&mut f, &self.v.len())?;
             ::bincode::serialize_into(f, &self.v[0..self.ctr])?;
         }) {
-            let e : ::anyhow::Error = e;
+            let e: ::anyhow::Error = e;
             eprintln!("Error saving raw receive data: {}", e);
         }
     }
 
     pub fn dump_raw_data(p: &::std::path::Path) -> crate::Result<()> {
         let mut f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
-        let _totpkt : usize = ::bincode::deserialize_from(&mut f)?;
-        let v : Vec<Info> = ::bincode::deserialize_from(f)?;
+        let _totpkt: usize = ::bincode::deserialize_from(&mut f)?;
+        let v: Vec<Info> = ::bincode::deserialize_from(f)?;
         for inf in v {
-            println!("{} {} {}", inf.seqn, inf.st_us as f64 / 1000.0, inf.rt_us as f64 / 1000.0);
+            println!(
+                "{} {} {}",
+                inf.seqn,
+                inf.st_us as f64 / 1000.0,
+                inf.rt_us as f64 / 1000.0
+            );
         }
         Ok(())
     }

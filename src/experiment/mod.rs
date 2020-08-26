@@ -1,8 +1,8 @@
-pub mod statement;
+pub mod analyser;
+pub mod receiver;
 pub mod results;
 pub mod sender;
-pub mod receiver;
-pub mod analyser;
+pub mod statement;
 pub mod visualiser;
 
 pub trait SmallishDuration {

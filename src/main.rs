@@ -1,8 +1,4 @@
-#![feature(vec_resize_default)]
 #![feature(try_blocks)]
-#![feature(nll)]
-
-
 #![allow(unused_imports)]
 #![deny(unused_must_use)]
 
@@ -26,7 +22,7 @@ extern crate counted_array;
 #[macro_use]
 extern crate static_assertions;
 
-#[macro_use] 
+#[macro_use]
 extern crate serde_derive;
 
 extern crate serde_cbor;
@@ -45,18 +41,16 @@ extern crate itertools;
 
 const API_VERSION: u32 = 7;
 
-
 use self::enum_unitary::EnumUnitary;
 
 use self::structopt::StructOpt;
 
 use std::net::SocketAddr;
 
-pub mod experiment;
-pub mod serve;
-pub mod probe;
 pub mod battery;
-
+pub mod experiment;
+pub mod probe;
+pub mod serve;
 
 pub type Result<T> = ::std::result::Result<T, ::anyhow::Error>;
 
@@ -78,17 +72,17 @@ struct ServerToClient {
     seqn_for_rtt: u32,
 }
 
-impl From<(ExperimentInfo,u32)> for ClientToServer {
-    fn from(x: (ExperimentInfo,u32)) -> Self {
-        ClientToServer { 
+impl From<(ExperimentInfo, u32)> for ClientToServer {
+    fn from(x: (ExperimentInfo, u32)) -> Self {
+        ClientToServer {
             experiment: x.0,
             api_version: API_VERSION,
             seqn_for_rtt: x.1,
         }
     }
 }
-impl From<(ExperimentReply,u32)> for ServerToClient {
-    fn from(x: (ExperimentReply,u32)) -> Self { 
+impl From<(ExperimentReply, u32)> for ServerToClient {
+    fn from(x: (ExperimentReply, u32)) -> Self {
         ServerToClient {
             reply: x.0,
             api_version: API_VERSION,
@@ -111,7 +105,7 @@ enum Cmd {
 
     /// Output statistics saved by -R option of probe or serve
     #[structopt(name = "rawdump")]
-    DumpSavedRawStats{
+    DumpSavedRawStats {
         #[structopt(parse(from_os_str))]
         file: ::std::path::PathBuf,
     },
@@ -154,16 +148,18 @@ fn main() -> Result<()> {
 
     match cmd {
         Cmd::Serve(x) => serve::serve(x)?,
-        Cmd::Probe(x) =>  probe::probe(x)?,
+        Cmd::Probe(x) => probe::probe(x)?,
         Cmd::RDump => experiment::results::dump_some_results()?,
-        Cmd::DumpSavedRawStats{file} => experiment::receiver::PacketReceiver::dump_raw_data(&file)?,
-        Cmd::AnalyseRaw{file} => experiment::analyser::read_and_analyse(&file)?,
-        Cmd::Show{file} => experiment::visualiser::read_and_visualize(&file)?,
+        Cmd::DumpSavedRawStats { file } => {
+            experiment::receiver::PacketReceiver::dump_raw_data(&file)?
+        }
+        Cmd::AnalyseRaw { file } => experiment::analyser::read_and_analyse(&file)?,
+        Cmd::Show { file } => experiment::visualiser::read_and_visualize(&file)?,
         Cmd::BatteryInfo => battery::Battery::generate().show(),
         Cmd::BatteryBBInfo => battery::Battery::generate_bb().show(),
         Cmd::Battery(x) => x.run()?,
         Cmd::BatteryShow(x) => x.run()?,
-        Cmd::BatteryMigrate{file} => battery::visualise::migrate(&file)?,
+        Cmd::BatteryMigrate { file } => battery::visualise::migrate(&file)?,
     };
     Ok(())
 }

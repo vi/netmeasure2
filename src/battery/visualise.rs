@@ -1,14 +1,13 @@
-use ::structopt::StructOpt;
-use crate::probe::{CmdImpl,CommunicOpts};
-use crate::experiment::results::{ResultsForStoring,ExperimentResults,CLUSTERS};
-use crate::experiment::statement::{ExperimentDirection,ExperimentInfo,ExperimentReply};
-use ::rand::{RngCore,SeedableRng,Rng};
-use ::rand_xorshift::XorShiftRng;
-use crate::Result;
 use super::Battery;
+use crate::experiment::results::{ExperimentResults, ResultsForStoring, CLUSTERS};
+use crate::experiment::statement::{ExperimentDirection, ExperimentInfo, ExperimentReply};
+use crate::probe::{CmdImpl, CommunicOpts};
+use crate::Result;
+use ::rand::{Rng, RngCore, SeedableRng};
+use ::rand_xorshift::XorShiftRng;
+use ::structopt::StructOpt;
 
-
-#[derive(Debug,EnumString,Clone,Copy)]
+#[derive(Debug, EnumString, Clone, Copy)]
 pub enum SortOrder {
     #[strum(serialize = "time")]
     Time,
@@ -20,20 +19,20 @@ pub enum SortOrder {
     PktRate,
 }
 
-#[derive(StructOpt,Debug)]
+#[derive(StructOpt, Debug)]
 pub struct BatteryShow {
     #[structopt(parse(from_os_str))]
     file: ::std::path::PathBuf,
 
-    #[structopt(long="verbose",short="v")]
+    #[structopt(long = "verbose", short = "v")]
     verbose: bool,
 
     /// kbps(default), rate (packet rate), size (packet size), time
-    #[structopt(long="sort",short="s",default_value="kbps")]
+    #[structopt(long = "sort", short = "s", default_value = "kbps")]
     sort: SortOrder,
 
     /// Show legend for symbols used in output (not including verose
-    #[structopt(long="legend")]
+    #[structopt(long = "legend")]
     legend: bool,
 }
 
@@ -41,7 +40,8 @@ impl BatteryShow {
     pub fn run(&self) -> Result<()> {
         print_summary(&self.file, self.verbose, self.sort)?;
         if self.legend {
-            print!(r#"## Legend: ##
+            print!(
+                r#"## Legend: ##
 `R` at the beginning - RTP simulation is on for this test
 Symbols after loss percentage:
 `*` - there is send-side loss - `sentdo` syscall takes too long to finish
@@ -54,7 +54,8 @@ Symbols after delay value:
 `.` `l` `L` `LL` - "latch-ups" - sudden sharp increases in delay
 `,` `r`, `R` - "recoveries" - quick decreasings of delay
 `lr`, `Lr`, etc. - combination of two above
-"#);
+"#
+            );
         }
         Ok(())
     }
@@ -66,9 +67,9 @@ pub struct Excerpt {
     pub ekbps: f32,
     pub loss: f32,
     pub badloss: f32,
-    pub badloss_fact : bool,
+    pub badloss_fact: bool,
     pub loss_sendside: bool,
-    pub loss_sendside_precise : f32,
+    pub loss_sendside_precise: f32,
     pub loss_recoverability: char,
     pub loss_at_the_end: bool,
     pub delay: f32,
@@ -80,7 +81,7 @@ impl Excerpt {
         let loss = if self.loss > 0.999 {
             "100!".to_string()
         } else {
-            format!("{:4.1}",self.loss*100.0)
+            format!("{:4.1}", self.loss * 100.0)
         };
         format!(
             "{:7.0} | {}{}{}{}| {:7.0} {}",
@@ -88,7 +89,7 @@ impl Excerpt {
             loss,
             if self.loss_sendside { '*' } else { ' ' },
             self.loss_recoverability,
-            if self.loss_at_the_end { '$' } else {' '},
+            if self.loss_at_the_end { '$' } else { ' ' },
             self.delay,
             self.latchup_marker,
         )
@@ -98,11 +99,11 @@ impl Excerpt {
     pub fn quality_score(&self) -> f32 {
         let mut loss_karma = 0.0;
         if self.loss > 0.8 {
-            return 0.0
+            return 0.0;
         }
-        loss_karma += self.loss - 0.5*self.loss_sendside_precise;
-        if self.badloss > 0.3*self.loss_sendside_precise {
-            loss_karma += 3.5 * (self.badloss - 0.3*self.loss_sendside_precise);
+        loss_karma += self.loss - 0.5 * self.loss_sendside_precise;
+        if self.badloss > 0.3 * self.loss_sendside_precise {
+            loss_karma += 3.5 * (self.badloss - 0.3 * self.loss_sendside_precise);
         }
         if self.badloss_fact {
             loss_karma += 0.5;
@@ -113,9 +114,9 @@ impl Excerpt {
         };
         let mut delay_karma = match self.delay {
             x if x > 5000.0 => 10.0,
-            x if x > 3000.0 => 6.0 + (10.0 - 6.0) * (x - 3000.0) / (5000.0-3000.0),
-            x if x > 1000.0 => 4.0 + (6.0 - 4.0) * (x - 1000.0) / (3000.0-1000.0),
-            x if x > 500.0 => 2.0 + (4.0 - 2.0) * (x - 500.0) / (1000.0-500.0),
+            x if x > 3000.0 => 6.0 + (10.0 - 6.0) * (x - 3000.0) / (5000.0 - 3000.0),
+            x if x > 1000.0 => 4.0 + (6.0 - 4.0) * (x - 1000.0) / (3000.0 - 1000.0),
+            x if x > 500.0 => 2.0 + (4.0 - 2.0) * (x - 500.0) / (1000.0 - 500.0),
             x => x / 500.0 * 2.0,
         };
         match self.latchup_marker {
@@ -137,10 +138,10 @@ impl Excerpt {
         };
         //println!("loss_karma={} delay_karma={}", loss_karma, delay_karma);
         let worst = delay_karma.max(loss_karma);
-        let avg = (delay_karma + loss_karma*2.0) / 3.0;
+        let avg = (delay_karma + loss_karma * 2.0) / 3.0;
         let mut adj = (avg + worst) / 2.0;
         if adj > 4.0 {
-            adj = 4.0  + (adj - 4.0) / 6.0;
+            adj = 4.0 + (adj - 4.0) / 6.0;
         }
         10.0 - 2.0 * adj
     }
@@ -152,7 +153,7 @@ impl ExperimentResults {
         let x = self;
         let lm = &x.loss_model;
         let loss = lm.loss_prob;
-        let badloss = loss * (1.0 - lm.loss[0] - 0.5*lm.loss[1] - 0.2*lm.loss[2]);
+        let badloss = loss * (1.0 - lm.loss[0] - 0.5 * lm.loss[1] - 0.2 * lm.loss[2]);
         let mut badloss_fact = false;
         for i in 11..CLUSTERS.len() {
             if lm.loss[i] > 0.00001 {
@@ -172,58 +173,55 @@ impl ExperimentResults {
             } else {
                 ' '
             }
-        } else if (lm.loss[0] +
-                    lm.loss[1] + 
-                    lm.loss[2] + 
-                    lm.loss[3] + 
-                    lm.loss[4] + 
-                    lm.loss[5] + 
-                    lm.loss[6] + 
-                    lm.loss[7] + 
-                    lm.loss[8] + 
-                    lm.loss[9] ) * lm.loss_prob >= 0.3 {
+        } else if (lm.loss[0]
+            + lm.loss[1]
+            + lm.loss[2]
+            + lm.loss[3]
+            + lm.loss[4]
+            + lm.loss[5]
+            + lm.loss[6]
+            + lm.loss[7]
+            + lm.loss[8]
+            + lm.loss[9])
+            * lm.loss_prob
+            >= 0.3
+        {
             '!'
         } else if lm.loss[0] >= 0.8 {
             'R'
-        } else if lm.loss[0]+
-                    lm.loss[1]+
-                    lm.loss[2] >= 0.7 {
+        } else if lm.loss[0] + lm.loss[1] + lm.loss[2] >= 0.7 {
             'r'
         } else {
             ' '
         };
-        let loss_at_the_end = if lm.end_lp > 100 {
-            true
-        } else {
-            false
-        };
+        let loss_at_the_end = if lm.end_lp > 100 { true } else { false };
 
         let delay = x.delay_model.mean_delay_ms;
         let latchup_marker = match (
-                (x.latchiness()*1000.0) as i32,
-                (x.delay_abrupt_decreaseness()*1000.0) as i32,
-            ) {
-            (-1000 ..= 200, -1000..=200) => "  ",
-            (200 ..= 2_000, -1000..=200) => ". ",
+            (x.latchiness() * 1000.0) as i32,
+            (x.delay_abrupt_decreaseness() * 1000.0) as i32,
+        ) {
+            (-1000..=200, -1000..=200) => "  ",
+            (200..=2_000, -1000..=200) => ". ",
             (2_000..=5_000, -1000..=200) => "l ",
-            (5_000..=10_000,-1000..=200) => "L ",
-            (10_000 ..= 100000000, -100..=2000) => "LL",
+            (5_000..=10_000, -1000..=200) => "L ",
+            (10_000..=100000000, -100..=2000) => "LL",
 
-            (-1000 ..= 200, 201..=2000) => " ,",
-            (201 ..= 2_000, 201..=2000) => ".,",
+            (-1000..=200, 201..=2000) => " ,",
+            (201..=2_000, 201..=2000) => ".,",
             (2_001..=5_000, 201..=2000) => "l,",
-            (5_001..=10_000,201..=2000) => "L,",
+            (5_001..=10_000, 201..=2000) => "L,",
 
-            (-1000 ..= 200, 2001..=5000) => " r",
-            (201 ..= 2_000, 2001..=5000) => ".r",
+            (-1000..=200, 2001..=5000) => " r",
+            (201..=2_000, 2001..=5000) => ".r",
             (2_001..=5_000, 2001..=5000) => "lr",
-            (5_001..=10_000,2001..=5000) => "Lr",
+            (5_001..=10_000, 2001..=5000) => "Lr",
 
-            (-1000 ..= 200, 5001..=10000) => " R",
-            (201 ..= 2_000, 5001..=10000000) => ".R",
+            (-1000..=200, 5001..=10000) => " R",
+            (201..=2_000, 5001..=10000000) => ".R",
             (2_001..=5_000, 5001..=10000000) => "lR",
-            (5_001..=10_00000000,5001..=10000000) => "LR",
-            (-1000..=2000,5001..=10000000) => "RR",
+            (5_001..=10_00000000, 5001..=10000000) => "LR",
+            (-1000..=2000, 5001..=10000000) => "RR",
 
             _ => "??",
         };
@@ -250,7 +248,7 @@ impl ResultsForStoring {
         let mut toserv = format!("");
         let mut fromserv = format!("");
         let mut score = 10.0f32;
-        let mut q = |x : &ExperimentResults| {
+        let mut q = |x: &ExperimentResults| {
             let e = x.get_exceprt(&entry.conditions);
             score = score.min(e.quality_score());
             e.format()
@@ -261,20 +259,19 @@ impl ResultsForStoring {
         if let Some(x) = entry.from_server.as_ref() {
             fromserv = q(x);
         }
-        let rtpmim = if entry.conditions.rtpmimic {
-            "R"
-        } else {
-            " "
-        };
-        (format!(
-            "{}{:6} | {:5} || {:29} || {:29}|| {:2.0}",
-            rtpmim,
-            entry.conditions.kbps(),
-            entry.conditions.packetsize,
-            toserv,
-            fromserv,
+        let rtpmim = if entry.conditions.rtpmimic { "R" } else { " " };
+        (
+            format!(
+                "{}{:6} | {:5} || {:29} || {:29}|| {:2.0}",
+                rtpmim,
+                entry.conditions.kbps(),
+                entry.conditions.packetsize,
+                toserv,
+                fromserv,
+                score,
+            ),
             score,
-        ), score)
+        )
     }
 }
 
@@ -283,26 +280,35 @@ impl Battery {
         let mut b = 0u64;
         let mut t = 0u64;
         for i in &self.0 {
-            println!("{:.3}mbps {}s {:?}",  i.kbps() as f32/1000.0, i.duration().as_secs(), i);
+            println!(
+                "{:.3}mbps {}s {:?}",
+                i.kbps() as f32 / 1000.0,
+                i.duration().as_secs(),
+                i
+            );
             b += i.bytes_used() as u64;
             t += i.duration().as_secs() + 5;
             if i.direction == ExperimentDirection::Bidirectional {
                 b += i.bytes_used() as u64; // once more
             }
         }
-        println!("Total {} MiB, {} minutes, {} experiments", b / 1024/1024, t / 60, self.0.len());
+        println!(
+            "Total {} MiB, {} minutes, {} experiments",
+            b / 1024 / 1024,
+            t / 60,
+            self.0.len()
+        );
     }
 }
 
-
 pub fn print_summary(p: &::std::path::Path, verbose: bool, sort_order: SortOrder) -> Result<()> {
     let f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
-    let v : Vec<ResultsForStoring> = ::serde_json::from_reader(f)?;
+    let v: Vec<ResultsForStoring> = ::serde_json::from_reader(f)?;
 
     use ::std::collections::BTreeMap;
-    let mut m : BTreeMap<u64, usize> = BTreeMap::new();
+    let mut m: BTreeMap<u64, usize> = BTreeMap::new();
 
-    for (i,entry) in v.iter().enumerate() {
+    for (i, entry) in v.iter().enumerate() {
         let sortkey = match sort_order {
             SortOrder::Kbps => entry.conditions.kbps() as u64,
             SortOrder::Time => i as u64,
@@ -312,17 +318,19 @@ pub fn print_summary(p: &::std::path::Path, verbose: bool, sort_order: SortOrder
         m.insert(sortkey, i);
     }
 
-    struct ScoreEntry{
+    struct ScoreEntry {
         val: f32,
         weight: f32,
     };
-    let mut scores : Vec<ScoreEntry> = Vec::with_capacity(40);
+    let mut scores: Vec<ScoreEntry> = Vec::with_capacity(40);
 
-    println!("  kbps  | pktsz || ekbps_^ | loss_^ | delay_^    || ekbps_v | loss_v | delay_v   || score");
+    println!(
+        "  kbps  | pktsz || ekbps_^ | loss_^ | delay_^    || ekbps_v | loss_v | delay_v   || score"
+    );
     for (_, &i) in m.iter() {
         let entry = &v[i];
         let (text, quality_score) = entry.short_summary();
-        println!("{}",text);
+        println!("{}", text);
         if verbose {
             entry.print_to_stdout();
         }
@@ -339,22 +347,33 @@ pub fn print_summary(p: &::std::path::Path, verbose: bool, sort_order: SortOrder
                 x if x < 20_000 => 0.4,
                 x if x < 30_000 => 0.2,
                 _ => 0.1,
-            }
+            },
         })
     }
 
-    let mut availability = 0.0; let mut availability_total = 0.0001;
-    let mut sum = 0.0; let mut weightsum = 0.0;
-    for ScoreEntry{val,mut weight} in scores {
+    let mut availability = 0.0;
+    let mut availability_total = 0.0001;
+    let mut sum = 0.0;
+    let mut weightsum = 0.0;
+    for ScoreEntry { val, mut weight } in scores {
         if weight >= 0.3 {
-            if val < 8.0 { weight *= 2.0; }
-            else if val < 7.0 { weight *= 2.5; }
-            else if val < 6.0 { weight *= 3.0; }
-            else if val < 5.0 { weight *= 3.5; }
-            else if val < 4.0 { weight *= 4.0; }
-            else if val < 3.0 { weight *= 4.5; }
-            else if val < 2.0 { weight *= 5.0; }
-            else if val < 1.0 { weight *= 6.0; }
+            if val < 8.0 {
+                weight *= 2.0;
+            } else if val < 7.0 {
+                weight *= 2.5;
+            } else if val < 6.0 {
+                weight *= 3.0;
+            } else if val < 5.0 {
+                weight *= 3.5;
+            } else if val < 4.0 {
+                weight *= 4.0;
+            } else if val < 3.0 {
+                weight *= 4.5;
+            } else if val < 2.0 {
+                weight *= 5.0;
+            } else if val < 1.0 {
+                weight *= 6.0;
+            }
 
             if val >= 6.0 {
                 availability += 1.0;
@@ -376,7 +395,7 @@ pub fn print_summary(p: &::std::path::Path, verbose: bool, sort_order: SortOrder
 
 pub fn migrate(p: &::std::path::Path) -> Result<()> {
     let f = ::std::io::BufReader::new(::std::fs::File::open(p)?);
-    let v : Vec<ResultsForStoring> = ::serde_json::from_reader(f)?;
+    let v: Vec<ResultsForStoring> = ::serde_json::from_reader(f)?;
     ::serde_json::ser::to_writer(&mut ::std::io::stdout().lock(), &v)?;
     Ok(())
 }
