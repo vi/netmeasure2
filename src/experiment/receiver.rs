@@ -92,7 +92,7 @@ impl PacketReceiver {
             ::bincode::serialize_into(&mut f, &self.v.len())?;
             ::bincode::serialize_into(f, &self.v[0..self.ctr])?;
         }) {
-            let e : ::failure::Error = e;
+            let e : ::anyhow::Error = e;
             eprintln!("Error saving raw receive data: {}", e);
         }
     }

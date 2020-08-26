@@ -1,4 +1,3 @@
-#![feature(const_slice_len)]
 #![feature(vec_resize_default)]
 #![feature(try_blocks)]
 #![feature(nll)]
@@ -8,7 +7,7 @@
 #![deny(unused_must_use)]
 
 #[macro_use]
-extern crate failure;
+extern crate anyhow;
 extern crate structopt;
 
 extern crate strum;
@@ -59,7 +58,7 @@ pub mod probe;
 pub mod battery;
 
 
-pub type Result<T> = ::std::result::Result<T, ::failure::Error>;
+pub type Result<T> = ::std::result::Result<T, ::anyhow::Error>;
 
 use crate::experiment::statement::ExperimentInfo;
 use crate::experiment::statement::ExperimentReply;

@@ -2,7 +2,7 @@ use ::structopt::StructOpt;
 use ::std::net::SocketAddr;
 use crate::Result;
 use ::std::str::from_utf8;
-use ::failure::Error;
+use ::anyhow::Error;
 use ::std::convert::identity;
 
 use ::std::net::UdpSocket;
