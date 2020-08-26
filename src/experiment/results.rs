@@ -10,7 +10,7 @@ pub const DELAY_DELTAS: [i32; _] = [
 ]);
 
 pub const ZERO_DELTA_IDX : usize = 15;
-const_assert!(ZERO_DELTA_IDX_correct; DELAY_DELTAS[ZERO_DELTA_IDX] == 0);
+const_assert_eq!(DELAY_DELTAS[ZERO_DELTA_IDX], 0);
 
 // Hard-coded delays values. Must be sorted.
 counted_array!(
@@ -79,8 +79,9 @@ pub struct ResultsForStoring {
     pub api_version: u32,
 }
 
+#[allow(unused)]
 const ER_SIZE : usize = ::std::mem::size_of::<ExperimentResults>() * 3/2 + 64;
-const_assert!(er_fits_udp_packet; ER_SIZE < 1420);
+const_assert!(ER_SIZE < 1420);
 
 pub fn dump_some_results() -> Result<()>  {
     let mut r = ExperimentResults::default();
